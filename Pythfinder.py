@@ -30,6 +30,16 @@ def run_flask():
 # 한국 시간대 설정
 KST = pytz.timezone('Asia/Seoul')
 
+# 상단에 개발자 ID 리스트 추가
+DEVELOPER_IDS = [667375690710122526]  # 여기에 개발자의 디스코드 ID를 넣으세요
+
+# 권한 체크 함수 추가
+def is_admin_or_developer(interaction: discord.Interaction) -> bool:
+    return (
+        interaction.user.guild_permissions.administrator or 
+        interaction.user.id in DEVELOPER_IDS
+    )
+
 # 데이터베이스 연결 함수
 def get_db_connection():
     try:
@@ -262,26 +272,26 @@ async def on_ready():
 @bot.tree.command(name="출석채널", description="출석을 인식할 채널을 지정합니다.")
 @app_commands.default_permissions(administrator=True)
 async def set_attendance_channel(interaction: discord.Interaction):
-    # 관리자 권한 확인
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("이 명령어는 서버 관리자만 사용할 수 있습니다!", ephemeral=True)
+    # 관리자 또는 개발자 권한 확인
+    if not is_admin_or_developer(interaction):
+        await interaction.response.send_message("이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!", ephemeral=True)
         return
         
     channel_id = interaction.channel_id
     
     conn = get_db_connection()
     if not conn:
+        await interaction.response.send_message("데이터베이스 연결 실패!", ephemeral=True)
         return
 
     try:
-        cur = conn.cursor()
-        cur.execute('INSERT INTO channels (channel_id) VALUES (%s)', (channel_id,))
+        c = conn.cursor()
+        c.execute('INSERT INTO channels (channel_id) VALUES (%s)', (channel_id,))
         conn.commit()
         bot.attendance_channels.add(channel_id)
         await interaction.response.send_message(f"이 채널이 출석 채널로 지정되었습니다!", ephemeral=True)
-    except Error as e:
-        print(f"데이터베이스 오류: {e}")
-        await interaction.response.send_message("오류가 발생했습니다.", ephemeral=True)
+    except psycopg2.IntegrityError:
+        await interaction.response.send_message(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
     finally:
         conn.close()
 
@@ -470,13 +480,13 @@ async def reset_money(interaction: discord.Interaction):
     name="디비테스트",
     description="데이터베이스 연결을 테스트합니다."
 )
+@app_commands.default_permissions(administrator=True)
 async def test_db(interaction: discord.Interaction):
-    # 관리자 권한 체크 수정
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("이 명령어는 관리자만 사용할 수 있습니다!", ephemeral=True)
+    if not is_admin_or_developer(interaction):
+        await interaction.response.send_message("이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!", ephemeral=True)
         return
-
-    print(f"디비테스트 명령어 실행 - 요청자: {interaction.user.name}")  # 디버깅 로그 추가
+    
+    print(f"디비테스트 명령어 실행 - 요청자: {interaction.user.name}")
     
     conn = get_db_connection()
     if not conn:
