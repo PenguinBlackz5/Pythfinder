@@ -648,6 +648,117 @@ async def clear_all_cache(interaction: discord.Interaction):
         ephemeral=True
     )
 
+@bot.tree.command(name="디비구조", description="데이터베이스의 테이블 구조와 현황을 확인합니다. (개발자 전용)")
+async def check_db_structure(interaction: discord.Interaction):
+    # 개발자 권한 확인
+    if interaction.user.id not in DEVELOPER_IDS:
+        await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    
+    conn = get_db_connection()
+    if not conn:
+        await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+        return
+
+    try:
+        cur = conn.cursor()
+        
+        # attendance 테이블 정보 조회
+        cur.execute("""
+            SELECT 
+                column_name, 
+                data_type, 
+                column_default,
+                is_nullable
+            FROM information_schema.columns 
+            WHERE table_name = 'attendance'
+            ORDER BY ordinal_position;
+        """)
+        attendance_columns = cur.fetchall()
+        
+        # channels 테이블 정보 조회
+        cur.execute("""
+            SELECT 
+                column_name, 
+                data_type, 
+                column_default,
+                is_nullable
+            FROM information_schema.columns 
+            WHERE table_name = 'channels'
+            ORDER BY ordinal_position;
+        """)
+        channels_columns = cur.fetchall()
+        
+        # 각 테이블의 레코드 수 조회
+        cur.execute("SELECT COUNT(*) FROM attendance")
+        attendance_count = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM channels")
+        channels_count = cur.fetchone()[0]
+        
+        # 서버별 통계 (현재 서버 강조)
+        current_guild = interaction.guild
+        if current_guild:
+            member_ids = [member.id for member in current_guild.members]
+            cur.execute("""
+                SELECT COUNT(*) FROM attendance 
+                WHERE user_id = ANY(%s)
+            """, (member_ids,))
+            current_guild_count = cur.fetchone()[0]
+        else:
+            current_guild_count = 0
+
+        # 메시지 구성
+        message = "📊 **데이터베이스 구조 및 현황**\n\n"
+        
+        # attendance 테이블 정보
+        message += "**📝 attendance 테이블**\n"
+        message += "```\n"
+        message += "컬럼명         타입      기본값    Null허용\n"
+        message += "----------------------------------------\n"
+        for col in attendance_columns:
+            message += f"{col[0]:<12} {col[1]:<8} {str(col[2]):<8} {col[3]:<6}\n"
+        message += "```\n"
+        message += f"총 레코드 수: {attendance_count}개\n"
+        if current_guild:
+            message += f"현재 서버 레코드 수: {current_guild_count}개\n"
+        message += "\n"
+        
+        # channels 테이블 정보
+        message += "**🔧 channels 테이블**\n"
+        message += "```\n"
+        message += "컬럼명         타입      기본값    Null허용\n"
+        message += "----------------------------------------\n"
+        for col in channels_columns:
+            message += f"{col[0]:<12} {col[1]:<8} {str(col[2]):<8} {col[3]:<6}\n"
+        message += "```\n"
+        message += f"총 레코드 수: {channels_count}개\n\n"
+        
+        # 출석 채널 목록
+        if channels_count > 0:
+            cur.execute("SELECT channel_id FROM channels")
+            channel_ids = cur.fetchall()
+            message += "**📍 등록된 출석 채널**\n"
+            for (channel_id,) in channel_ids:
+                channel = bot.get_channel(channel_id)
+                if channel:
+                    message += f"- {channel.guild.name} / #{channel.name}\n"
+                else:
+                    message += f"- 알 수 없는 채널 (ID: {channel_id})\n"
+        
+        await interaction.followup.send(message, ephemeral=True)
+        
+    except Exception as e:
+        print(f"데이터베이스 구조 조회 중 오류 발생: {e}")
+        await interaction.followup.send(
+            f"❌ 데이터베이스 조회 중 오류가 발생했습니다.\n```{str(e)}```", 
+            ephemeral=True
+        )
+    finally:
+        conn.close()
+
 # 봇 실행 부분 수정
 if __name__ == "__main__":
     # Flask 서버를 별도 스레드에서 실행
