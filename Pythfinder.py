@@ -1,7 +1,8 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import sqlite3
+import psycopg2
+from psycopg2 import Error
 from datetime import datetime, timedelta
 import pytz
 from discord.ui import Button, View
@@ -9,6 +10,10 @@ import os
 # 웹 서버를 위한 추가 import
 from flask import Flask
 import threading
+from dotenv import load_dotenv
+
+# 환경변수 로드
+load_dotenv()
 
 # Flask 앱 생성
 app = Flask(__name__)
@@ -25,6 +30,14 @@ def run_flask():
 # 한국 시간대 설정
 KST = pytz.timezone('Asia/Seoul')
 
+# 데이터베이스 연결 함수
+def get_db_connection():
+    try:
+        return psycopg2.connect(os.getenv('DATABASE_URL'))
+    except Error as e:
+        print(f"데이터베이스 연결 오류: {e}")
+        return None
+
 class ConfirmView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)  # 60초 후 버튼 비활성화
@@ -40,28 +53,37 @@ class ConfirmView(View):
         self.value = True
         self.stop()
         
-        # 데이터베이스에서 사용자의 출석 정보만 초기화
-        db_path = '/tmp/attendance.db'
-        conn = sqlite3.connect(db_path)
-        c = conn.cursor()
-        
-        # 현재 보유 금액 확인
-        c.execute('SELECT money FROM attendance WHERE user_id = ?', (self.user_id,))
-        result = c.fetchone()
-        current_money = result[0] if result else 0
-        
-        # 출석 정보 초기화하되 보유 금액은 유지
-        c.execute('''INSERT OR REPLACE INTO attendance 
-                     (user_id, last_attendance, streak, money)
-                     VALUES (?, NULL, 0, ?)''', (self.user_id, current_money))
-        
-        conn.commit()
-        conn.close()
-        
-        await interaction.response.edit_message(
-            content="출석 정보가 초기화되었습니다.\n💰 보유 금액은 유지됩니다.", 
-            view=None
-        )
+        conn = get_db_connection()
+        if not conn:
+            await interaction.response.send_message("데이터베이스 연결 오류가 발생했습니다.", ephemeral=True)
+            return
+
+        try:
+            cur = conn.cursor()
+            
+            # 현재 보유 금액 확인
+            cur.execute('SELECT money FROM attendance WHERE user_id = %s', (self.user_id,))
+            result = cur.fetchone()
+            current_money = result[0] if result else 0
+            
+            # 출석 정보 초기화하되 보유 금액은 유지
+            cur.execute('''
+                INSERT INTO attendance (user_id, last_attendance, streak, money)
+                VALUES (%s, NULL, 0, %s)
+                ON CONFLICT (user_id) DO UPDATE 
+                SET last_attendance = NULL, streak = 0, money = %s
+            ''', (self.user_id, current_money, current_money))
+            
+            conn.commit()
+            await interaction.response.edit_message(
+                content="출석 정보가 초기화되었습니다.\n💰 보유 금액은 유지됩니다.", 
+                view=None
+            )
+        except Error as e:
+            print(f"데이터베이스 오류: {e}")
+            await interaction.response.send_message("오류가 발생했습니다.", ephemeral=True)
+        finally:
+            conn.close()
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
     async def cancel(self, interaction: discord.Interaction, button: Button):
@@ -88,35 +110,44 @@ class MoneyResetView(View):
         self.value = True
         self.stop()
         
-        db_path = '/tmp/attendance.db'
-        conn = sqlite3.connect(db_path)
-        c = conn.cursor()
-        
-        # 현재 출석 정보 확인
-        c.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = ?', (self.user_id,))
-        result = c.fetchone()
-        
-        # 기존 출석 정보는 유지하고 돈만 0으로 설정
-        if result:
-            last_attendance = result[0]
-            streak = result[1]
-        else:
-            last_attendance = None
-            streak = 0
+        conn = get_db_connection()
+        if not conn:
+            await interaction.response.send_message("데이터베이스 연결 오류가 발생했습니다.", ephemeral=True)
+            return
+
+        try:
+            cur = conn.cursor()
             
-        # INSERT OR REPLACE로 변경
-        c.execute('''INSERT OR REPLACE INTO attendance 
-                     (user_id, last_attendance, streak, money)
-                     VALUES (?, ?, ?, 0)''', 
-                  (self.user_id, last_attendance, streak))
-        
-        conn.commit()
-        conn.close()
-        
-        await interaction.response.edit_message(
-            content="💰 보유 금액이 0원으로 초기화되었습니다.", 
-            view=None
-        )
+            # 현재 출석 정보 확인
+            cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (self.user_id,))
+            result = cur.fetchone()
+            
+            # 기존 출석 정보는 유지하고 돈만 0으로 설정
+            if result:
+                last_attendance = result[0]
+                streak = result[1]
+            else:
+                last_attendance = None
+                streak = 0
+            
+            # INSERT OR REPLACE로 변경
+            cur.execute('''
+                INSERT INTO attendance (user_id, last_attendance, streak, money)
+                VALUES (%s, %s, %s, 0)
+                ON CONFLICT (user_id) DO UPDATE 
+                SET last_attendance = %s, streak = %s
+            ''', (self.user_id, last_attendance, streak, last_attendance, streak))
+            
+            conn.commit()
+            await interaction.response.edit_message(
+                content="💰 보유 금액이 0원으로 초기화되었습니다.", 
+                view=None
+            )
+        except Error as e:
+            print(f"데이터베이스 오류: {e}")
+            await interaction.response.send_message("오류가 발생했습니다.", ephemeral=True)
+        finally:
+            conn.close()
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
     async def cancel(self, interaction: discord.Interaction, button: Button):
@@ -150,37 +181,50 @@ class AttendanceBot(commands.Bot):
             print(f'슬래시 명령어 동기화 중 오류 발생: {e}')
         
     def init_database(self):
-        # 데이터베이스 파일 경로를 /tmp 디렉토리로 변경
-        db_path = '/tmp/attendance.db'
-        conn = sqlite3.connect(db_path)
-        c = conn.cursor()
-        
-        # 기존 테이블 삭제
-        c.execute('DROP TABLE IF EXISTS attendance')
-        
-        # 출석 정보를 저장할 테이블 생성 (user_id를 PRIMARY KEY로 설정)
-        c.execute('''CREATE TABLE IF NOT EXISTS attendance
-                    (user_id INTEGER PRIMARY KEY, 
-                     last_attendance TEXT,
-                     streak INTEGER DEFAULT 0,
-                     money INTEGER DEFAULT 0)''')
-                     
-        # 출석 채널 정보를 저장할 테이블 생성
-        c.execute('''CREATE TABLE IF NOT EXISTS channels
-                    (channel_id INTEGER PRIMARY KEY)''')
-        
-        conn.commit()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+            print("데이터베이스 초기화 실패")
+            return
+
+        try:
+            cur = conn.cursor()
+            
+            # 테이블 생성
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS attendance (
+                    user_id BIGINT PRIMARY KEY,
+                    last_attendance DATE,
+                    streak INTEGER DEFAULT 0,
+                    money INTEGER DEFAULT 0
+                )
+            ''')
+            
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS channels (
+                    channel_id BIGINT PRIMARY KEY
+                )
+            ''')
+            
+            conn.commit()
+        except Error as e:
+            print(f"테이블 생성 오류: {e}")
+        finally:
+            conn.close()
     
     def load_attendance_channels(self):
-        # 데이터베이스 파일 경로를 /tmp 디렉토리로 변경
-        db_path = '/tmp/attendance.db'
-        conn = sqlite3.connect(db_path)
-        c = conn.cursor()
-        c.execute('SELECT channel_id FROM channels')
-        channels = c.fetchall()
-        self.attendance_channels = set(channel[0] for channel in channels)
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+            return
+
+        try:
+            cur = conn.cursor()
+            cur.execute('SELECT channel_id FROM channels')
+            channels = cur.fetchall()
+            self.attendance_channels = set(channel[0] for channel in channels)
+        except Error as e:
+            print(f"채널 로드 오류: {e}")
+        finally:
+            conn.close()
 
 bot = AttendanceBot()
 
@@ -205,17 +249,19 @@ async def set_attendance_channel(interaction: discord.Interaction):
         
     channel_id = interaction.channel_id
     
-    db_path = '/tmp/attendance.db'
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    
+    conn = get_db_connection()
+    if not conn:
+        return
+
     try:
-        c.execute('INSERT INTO channels (channel_id) VALUES (?)', (channel_id,))
+        cur = conn.cursor()
+        cur.execute('INSERT INTO channels (channel_id) VALUES (%s)', (channel_id,))
         conn.commit()
         bot.attendance_channels.add(channel_id)
         await interaction.response.send_message(f"이 채널이 출석 채널로 지정되었습니다!", ephemeral=True)
-    except sqlite3.IntegrityError:
-        await interaction.response.send_message(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
+    except Error as e:
+        print(f"데이터베이스 오류: {e}")
+        await interaction.response.send_message("오류가 발생했습니다.", ephemeral=True)
     finally:
         conn.close()
 
@@ -224,77 +270,90 @@ async def check_attendance(interaction: discord.Interaction):
     user_id = interaction.user.id
     today = datetime.now(KST).strftime('%Y-%m-%d')  # KST 기준 오늘 날짜
     
-    db_path = '/tmp/attendance.db'
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    
-    c.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = ?', (user_id,))
-    result = c.fetchone()
-    
-    if result and result[0] is not None:
-        last_attendance = result[0]  # 저장된 마지막 출석일
-        streak = result[1]
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
         
-        status = "완료" if last_attendance == today else "미완료"
+        cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
         
-        await interaction.response.send_message(
-            f"📊 출석 현황\n"
-            f"오늘 출석: {status}\n"
-            f"연속 출석: {streak}일",
-            ephemeral=True
-        )
-    else:
-        # 출석 기록이 없거나 초기화된 경우
-        await interaction.response.send_message(
-            f"📊 출석 현황\n"
-            f"오늘 출석: 미완료\n"
-            f"연속 출석: 0일",
-            ephemeral=True
-        )
-    
-    conn.close()
+        if result and result[0] is not None:
+            last_attendance = result[0]  # 저장된 마지막 출석일
+            streak = result[1]
+            
+            status = "완료" if last_attendance == today else "미완료"
+            
+            await interaction.response.send_message(
+                f"📊 출석 현황\n"
+                f"오늘 출석: {status}\n"
+                f"연속 출석: {streak}일",
+                ephemeral=True
+            )
+        else:
+            # 출석 기록이 없거나 초기화된 경우
+            await interaction.response.send_message(
+                f"📊 출석 현황\n"
+                f"오늘 출석: 미완료\n"
+                f"연속 출석: 0일",
+                ephemeral=True
+            )
+        
+    except Error as e:
+        print(f"출석 현황 확인 중 오류 발생: {e}")
+        await interaction.response.send_message("출석 현황 확인 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+    finally:
+        conn.close()
 
 @bot.tree.command(name="통장", description="보유한 금액을 확인합니다.")
 async def check_balance(interaction: discord.Interaction):
     user_id = interaction.user.id
     
-    db_path = '/tmp/attendance.db'
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    
-    c.execute('SELECT money FROM attendance WHERE user_id = ?', (user_id,))
-    result = c.fetchone()
-    
-    if result:
-        money = result[0]
-        await interaction.response.send_message(
-            f"💰 현재 잔액: {money}원",
-            ephemeral=True
-        )
-    else:
-        await interaction.response.send_message("통장 기록이 없습니다!", ephemeral=True)
-    
-    conn.close()
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+        
+        cur.execute('SELECT money FROM attendance WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
+        
+        if result:
+            money = result[0]
+            await interaction.response.send_message(
+                f"💰 현재 잔액: {money}원",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message("통장 기록이 없습니다!", ephemeral=True)
+        
+    except Error as e:
+        print(f"잔액 확인 중 오류 발생: {e}")
+        await interaction.response.send_message("잔액 확인 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+    finally:
+        conn.close()
 
 @bot.event
 async def on_message(message):
-    if message.author.bot:
-        return
-        
-    if message.channel.id not in bot.attendance_channels:
+    if message.author.bot or message.channel.id not in bot.attendance_channels:
         return
         
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
     
-    db_path = '/tmp/attendance.db'
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    
+    conn = get_db_connection()
+    if not conn:
+        return
+
     try:
+        cur = conn.cursor()
+        
         # 현재 사용자 정보 확인
-        c.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
+        cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
         
         if result:
             last_attendance = result[0]
@@ -330,16 +389,19 @@ async def on_message(message):
             streak = 1
             
         # 출석 순서 확인
-        c.execute('''SELECT COUNT(*) FROM attendance 
-                     WHERE last_attendance = ? AND user_id != ?''', 
-                  (today, user_id))
-        attendance_order = c.fetchone()[0] + 1
+        cur.execute('''
+            SELECT COUNT(*) FROM attendance 
+            WHERE DATE(last_attendance) = %s AND user_id != %s
+        ''', (today, user_id))
+        attendance_order = cur.fetchone()[0] + 1
         
-        # 출석 정보 업데이트 (PRIMARY KEY로 인해 자동으로 REPLACE 작동)
-        c.execute('''INSERT OR REPLACE INTO attendance 
-                     (user_id, last_attendance, streak, money)
-                     VALUES (?, ?, ?, ?)''',
-                  (user_id, today, streak, current_money + 10))
+        # 출석 정보 업데이트
+        cur.execute('''
+            INSERT INTO attendance (user_id, last_attendance, streak, money)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE 
+            SET last_attendance = %s, streak = %s, money = attendance.money + 10
+        ''', (user_id, today, streak, current_money + 10, today, streak))
         
         conn.commit()
         
@@ -350,10 +412,9 @@ async def on_message(message):
             f"💰 출석 보상 10원이 지급되었습니다."
         )
         
-    except Exception as e:
+    except Error as e:
         print(f"출석 처리 중 오류 발생: {e}")
-        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.")
-        
+        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
     finally:
         conn.close()
 
