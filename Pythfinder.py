@@ -353,4 +353,4 @@ async def reset_money(interaction: discord.Interaction):
         ephemeral=True
     )
 
-bot.run('MTM0NzA2MDYxMzg4MDM0ODY3Mg.GJYfX3.N0Vg2hA19yEqOQCMrjTwcvJujG5oTBvzBwKg_A')
+bot.run('MTM0NzA2MDYxMzg4MDM0ODY3Mg.GXYDE2.gCv4UMgpzzhcbBaywfiEXI00P1YZRIZaUnbxHo')
