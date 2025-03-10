@@ -6,6 +6,21 @@ from datetime import datetime, timedelta
 import pytz
 from discord.ui import Button, View
 import os
+# 웹 서버를 위한 추가 import
+from flask import Flask
+import threading
+
+# Flask 앱 생성
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    # Render에서 제공하는 PORT 환경변수 사용
+    port = int(os.getenv("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # 한국 시간대 설정
 KST = pytz.timezone('Asia/Seoul')
@@ -366,7 +381,11 @@ async def reset_money(interaction: discord.Interaction):
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
-    # 환경 변수에서 토큰 가져오기
+    # Flask 서버를 별도 스레드에서 실행
+    server_thread = threading.Thread(target=run_flask)
+    server_thread.start()
+
+    # 봇 토큰 설정 및 실행
     TOKEN = os.getenv('DISCORD_TOKEN')
     if not TOKEN:
         raise ValueError("DISCORD_TOKEN 환경 변수가 설정되지 않았습니다!")
