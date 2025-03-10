@@ -168,7 +168,7 @@ class AttendanceBot(commands.Bot):
         intents.message_content = True
         super().__init__(command_prefix='!', intents=intents)
         
-        print("데이터베이스 초기화 시작...")  # 초기화 시작 로그
+        print("봇 초기화 시작...")
         self.init_database()
         self.attendance_channels = set()
         self.load_attendance_channels()
@@ -176,11 +176,15 @@ class AttendanceBot(commands.Bot):
     async def setup_hook(self):
         # 슬래시 명령어 동기화
         try:
+            print("슬래시 명령어 동기화 시작...")
             synced = await self.tree.sync()
-            print(f'동기화된 슬래시 명령어: {len(synced)}개')
+            print(f"동기화된 슬래시 명령어: {len(synced)}개")
+            # 동기화된 명령어 목록 출력
+            for cmd in synced:
+                print(f"- {cmd.name}")
         except Exception as e:
-            print(f'슬래시 명령어 동기화 중 오류 발생: {e}')
-        
+            print(f"슬래시 명령어 동기화 중 오류 발생: {e}")
+
     def init_database(self):
         conn = get_db_connection()
         if not conn:
@@ -246,8 +250,12 @@ async def on_ready():
     
     # 봇이 시작될 때 명령어 동기화 상태 확인
     try:
+        print("봇 시작 시 명령어 동기화 시도...")
         synced = await bot.tree.sync()
         print(f'명령어 동기화 완료! {len(synced)}개의 명령어가 동기화되었습니다.')
+        # 동기화된 명령어 목록 출력
+        for cmd in synced:
+            print(f"- {cmd.name}")
     except Exception as e:
         print(f'명령어 동기화 중 오류 발생: {e}')
 
@@ -452,13 +460,18 @@ async def reset_money(interaction: discord.Interaction):
         ephemeral=True
     )
 
-@bot.tree.command(name="디비테스트", description="데이터베이스 연결을 테스트합니다.")
-@app_commands.default_permissions(administrator=True)
+@bot.tree.command(
+    name="디비테스트",
+    description="데이터베이스 연결을 테스트합니다."
+)
 async def test_db(interaction: discord.Interaction):
+    # 관리자 권한 체크 수정
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("이 명령어는 관리자만 사용할 수 있습니다!", ephemeral=True)
         return
 
+    print(f"디비테스트 명령어 실행 - 요청자: {interaction.user.name}")  # 디버깅 로그 추가
+    
     conn = get_db_connection()
     if not conn:
         await interaction.response.send_message("❌ 데이터베이스 연결 실패!", ephemeral=True)
@@ -501,7 +514,8 @@ async def test_db(interaction: discord.Interaction):
         
         await interaction.response.send_message(status_message, ephemeral=True)
         
-    except Error as e:
+    except Exception as e:
+        print(f"디비테스트 실행 중 오류: {e}")  # 디버깅 로그 추가
         await interaction.response.send_message(
             f"❌ 데이터베이스 쿼리 실행 중 오류 발생:\n{str(e)}", 
             ephemeral=True
