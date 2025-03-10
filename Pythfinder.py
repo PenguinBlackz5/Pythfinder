@@ -188,6 +188,20 @@ class ClearAllView(View):
         self.value = True
         self.stop()
         
+        guild = interaction.guild
+        await guild.chunk()  # 멤버 목록 다시 로드
+        
+        # 멤버 ID 목록 생성 (봇 제외)
+        member_ids = [member.id for member in guild.members if not member.bot]
+        print(f"초기화 대상 멤버 ID 목록: {member_ids}")  # 디버깅용
+        
+        if not member_ids:
+            await interaction.response.edit_message(
+                content="❌ 멤버 목록을 가져올 수 없습니다.", 
+                view=None
+            )
+            return
+            
         conn = get_db_connection()
         if not conn:
             await interaction.response.edit_message(content="데이터베이스 연결 실패!", view=None)
@@ -196,66 +210,33 @@ class ClearAllView(View):
         try:
             cur = conn.cursor()
             
-            # 해당 서버의 멤버 목록 가져오기
-            guild = interaction.guild
-            
-            # 멤버 목록이 제대로 가져와지는지 확인
-            print(f"서버 이름: {guild.name}")
-            print(f"서버 멤버 수: {guild.member_count}")
-            
-            # 멤버 목록 가져오기 (봇 제외)
-            member_ids = [member.id for member in guild.members if not member.bot]
-            
-            print(f"필터링된 멤버 수: {len(member_ids)}")
-            print(f"멤버 ID 목록: {member_ids}")
-            
-            if not member_ids:
-                await interaction.response.edit_message(
-                    content="❌ 멤버 목록을 가져올 수 없습니다.", 
-                    view=None
-                )
-                return
-            
             # 현재 데이터베이스 상태 확인
             cur.execute('SELECT COUNT(*) FROM attendance')
-            total_records = cur.fetchone()[0]
-            print(f"초기화 전 전체 레코드 수: {total_records}")
+            total_before = cur.fetchone()[0]
             
-            # IN 연산자를 사용하여 해당 서버 멤버들의 데이터 삭제
-            member_ids_str = ','.join(str(id) for id in member_ids)
-            delete_query = f'''
-                DELETE FROM attendance 
-                WHERE user_id IN ({member_ids_str})
-                RETURNING user_id
-            '''
-            print(f"실행될 쿼리: {delete_query}")
-            
-            cur.execute(delete_query)
-            deleted_rows = cur.fetchall()
-            deleted_count = len(deleted_rows)
-            
-            # 삭제 후 데이터베이스 상태 확인
-            cur.execute('SELECT COUNT(*) FROM attendance')
-            remaining_records = cur.fetchone()[0]
-            
-            print(f"삭제된 레코드 수: {deleted_count}")
-            print(f"삭제된 user_id 목록: {[row[0] for row in deleted_rows]}")
-            print(f"남은 레코드 수: {remaining_records}")
+            # 멤버별로 개별 삭제 (더 안정적인 방법)
+            deleted_count = 0
+            for member_id in member_ids:
+                cur.execute('DELETE FROM attendance WHERE user_id = %s RETURNING user_id', (member_id,))
+                if cur.fetchone():
+                    deleted_count += 1
             
             conn.commit()
+            
+            # 삭제 후 상태 확인
+            cur.execute('SELECT COUNT(*) FROM attendance')
+            total_after = cur.fetchone()[0]
             
             status_message = (
                 f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
                 f"- 서버: {guild.name}\n"
                 f"- 처리된 멤버 수: {len(member_ids)}명\n"
                 f"- 삭제된 데이터 수: {deleted_count}개\n"
-                f"- 전체 레코드 변화: {total_records} → {remaining_records}"
+                f"- 전체 레코드 변화: {total_before} → {total_after}"
             )
             
-            await interaction.response.edit_message(
-                content=status_message,
-                view=None
-            )
+            print(status_message)  # 디버깅용
+            await interaction.response.edit_message(content=status_message, view=None)
             
         except Exception as e:
             print(f"데이터베이스 초기화 중 오류 발생: {e}")
@@ -671,25 +652,43 @@ async def clear_all_cache(interaction: discord.Interaction):
         return
 
     guild = interaction.guild
-    view = ClearAllView(interaction.user.id, guild.id)
     
-    # 멤버 수 확인 (봇 제외)
-    member_count = len([member for member in guild.members if not member.bot])
-    
-    await interaction.response.send_message(
-        f"⚠️ **정말로 이 서버의 출석 데이터를 초기화하시겠습니까?**\n\n"
-        f"**서버: {guild.name}**\n"
-        f"**영향 받는 멤버: {member_count}명**\n\n"
-        "다음 데이터가 초기화됩니다:\n"
-        "- 서버 멤버들의 출석 정보\n"
-        "- 서버 멤버들의 연속 출석 일수\n"
-        "- 서버 멤버들의 보유 금액\n\n"
-        "❗ **이 작업은 되돌릴 수 없습니다!**\n"
-        "❗ **출석 채널 설정은 유지됩니다.**\n"
-        "❗ **다른 서버의 데이터는 영향받지 않습니다.**",
-        view=view,
-        ephemeral=True
-    )
+    try:
+        # 서버 멤버 목록 다시 가져오기
+        await guild.chunk()  # 모든 멤버 정보 다시 로드
+        
+        # 실제 멤버 수 계산 (봇 제외)
+        member_count = sum(1 for member in guild.members if not member.bot)
+        print(f"서버 '{guild.name}'의 멤버 수: {member_count}")  # 디버깅용
+        
+        if member_count == 0:
+            await interaction.response.send_message(
+                "❌ 멤버 목록을 가져올 수 없습니다. 봇의 권한을 확인해주세요.", 
+                ephemeral=True
+            )
+            return
+            
+        view = ClearAllView(interaction.user.id, guild.id)
+        await interaction.response.send_message(
+            f"⚠️ **정말로 이 서버의 출석 데이터를 초기화하시겠습니까?**\n\n"
+            f"**서버: {guild.name}**\n"
+            f"**영향 받는 멤버: {member_count}명**\n\n"
+            "다음 데이터가 초기화됩니다:\n"
+            "- 서버 멤버들의 출석 정보\n"
+            "- 서버 멤버들의 연속 출석 일수\n"
+            "- 서버 멤버들의 보유 금액\n\n"
+            "❗ **이 작업은 되돌릴 수 없습니다!**\n"
+            "❗ **출석 채널 설정은 유지됩니다.**\n"
+            "❗ **다른 서버의 데이터는 영향받지 않습니다.**",
+            view=view,
+            ephemeral=True
+        )
+    except Exception as e:
+        print(f"멤버 목록 가져오기 실패: {e}")
+        await interaction.response.send_message(
+            "멤버 목록을 가져오는 중 오류가 발생했습니다.",
+            ephemeral=True
+        )
 
 @bot.tree.command(name="디비구조", description="데이터베이스의 테이블 구조와 현황을 확인합니다. (개발자 전용)")
 async def check_db_structure(interaction: discord.Interaction):
