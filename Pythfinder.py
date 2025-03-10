@@ -172,6 +172,69 @@ class MoneyResetView(View):
         self.stop()
         await interaction.response.edit_message(content="통장 초기화가 취소되었습니다.", view=None)
 
+class ClearAllView(View):
+    def __init__(self, user_id, guild_id):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.value = None
+
+    @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
+            return
+        
+        self.value = True
+        self.stop()
+        
+        conn = get_db_connection()
+        if not conn:
+            await interaction.response.edit_message(content="데이터베이스 연결 실패!", view=None)
+            return
+
+        try:
+            cur = conn.cursor()
+            
+            # 해당 서버의 멤버 목록 가져오기
+            guild = interaction.guild
+            member_ids = [member.id for member in guild.members]
+            
+            # attendance 테이블에서 해당 서버 멤버들의 데이터만 초기화
+            cur.execute('''
+                DELETE FROM attendance 
+                WHERE user_id = ANY(%s)
+            ''', (member_ids,))
+            
+            deleted_count = cur.rowcount  # 삭제된 레코드 수
+            conn.commit()
+            
+            await interaction.response.edit_message(
+                content=f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
+                f"- 총 {deleted_count}명의 데이터가 초기화되었습니다.\n"
+                f"- 서버: {guild.name}", 
+                view=None
+            )
+            
+        except Exception as e:
+            print(f"데이터베이스 초기화 중 오류 발생: {e}")
+            await interaction.response.edit_message(
+                content="❌ 데이터 초기화 중 오류가 발생했습니다.", 
+                view=None
+            )
+        finally:
+            conn.close()
+
+    @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.gray)
+    async def cancel(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
+            return
+            
+        self.value = False
+        self.stop()
+        await interaction.response.edit_message(content="데이터 초기화가 취소되었습니다.", view=None)
+
 class AttendanceBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
@@ -551,6 +614,39 @@ async def test_db(interaction: discord.Interaction):
         )
     finally:
         conn.close()
+
+@bot.tree.command(name="클리어올캐시", description="⚠️ 이 서버의 모든 출석 데이터를 초기화합니다. (개발자 전용)")
+async def clear_all_cache(interaction: discord.Interaction):
+    # 개발자 권한 확인
+    if interaction.user.id not in DEVELOPER_IDS:
+        await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+        return
+
+    # DM에서 실행 방지
+    if not interaction.guild:
+        await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    view = ClearAllView(interaction.user.id, guild.id)
+    
+    # 서버 멤버 수 확인
+    member_count = len([member for member in guild.members if not member.bot])
+    
+    await interaction.response.send_message(
+        f"⚠️ **정말로 이 서버의 출석 데이터를 초기화하시겠습니까?**\n\n"
+        f"**서버: {guild.name}**\n"
+        f"**영향 받는 멤버: 약 {member_count}명**\n\n"
+        "다음 데이터가 초기화됩니다:\n"
+        "- 서버 멤버들의 출석 정보\n"
+        "- 서버 멤버들의 연속 출석 일수\n"
+        "- 서버 멤버들의 보유 금액\n\n"
+        "❗ **이 작업은 되돌릴 수 없습니다!**\n"
+        "❗ **출석 채널 설정은 유지됩니다.**\n"
+        "❗ **다른 서버의 데이터는 영향받지 않습니다.**",
+        view=view,
+        ephemeral=True
+    )
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
