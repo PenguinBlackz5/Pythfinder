@@ -33,9 +33,12 @@ KST = pytz.timezone('Asia/Seoul')
 # 데이터베이스 연결 함수
 def get_db_connection():
     try:
-        return psycopg2.connect(os.getenv('DATABASE_URL'))
+        print("데이터베이스 연결 시도 중...")  # 연결 시도 로그
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+        print("데이터베이스 연결 성공!")  # 성공 로그
+        return conn
     except Error as e:
-        print(f"데이터베이스 연결 오류: {e}")
+        print(f"데이터베이스 연결 오류: {e}")  # 상세한 에러 메시지
         return None
 
 class ConfirmView(View):
@@ -165,10 +168,8 @@ class AttendanceBot(commands.Bot):
         intents.message_content = True
         super().__init__(command_prefix='!', intents=intents)
         
-        # 데이터베이스 초기화
+        print("데이터베이스 초기화 시작...")  # 초기화 시작 로그
         self.init_database()
-        
-        # 출석 채널 ID 저장 변수
         self.attendance_channels = set()
         self.load_attendance_channels()
 
@@ -189,6 +190,16 @@ class AttendanceBot(commands.Bot):
         try:
             cur = conn.cursor()
             
+            # 테이블 존재 여부 확인
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'attendance'
+                )
+            """)
+            table_exists = cur.fetchone()[0]
+            print(f"attendance 테이블 존재 여부: {table_exists}")  # 테이블 존재 여부 로그
+            
             # 테이블 생성
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS attendance (
@@ -206,6 +217,7 @@ class AttendanceBot(commands.Bot):
             ''')
             
             conn.commit()
+            print("테이블 생성/확인 완료!")  # 테이블 생성 완료 로그
         except Error as e:
             print(f"테이블 생성 오류: {e}")
         finally:
@@ -439,6 +451,63 @@ async def reset_money(interaction: discord.Interaction):
         view=view,
         ephemeral=True
     )
+
+@bot.tree.command(name="디비테스트", description="데이터베이스 연결을 테스트합니다.")
+@app_commands.default_permissions(administrator=True)
+async def test_db(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("이 명령어는 관리자만 사용할 수 있습니다!", ephemeral=True)
+        return
+
+    conn = get_db_connection()
+    if not conn:
+        await interaction.response.send_message("❌ 데이터베이스 연결 실패!", ephemeral=True)
+        return
+
+    try:
+        cur = conn.cursor()
+        
+        # 테이블 존재 여부 확인
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'attendance'
+            )
+        """)
+        attendance_exists = cur.fetchone()[0]
+        
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'channels'
+            )
+        """)
+        channels_exists = cur.fetchone()[0]
+        
+        # 각 테이블의 레코드 수 확인
+        cur.execute("SELECT COUNT(*) FROM attendance")
+        attendance_count = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM channels")
+        channels_count = cur.fetchone()[0]
+        
+        status_message = (
+            "✅ 데이터베이스 연결 테스트 결과\n\n"
+            f"attendance 테이블: {'존재함' if attendance_exists else '없음'}\n"
+            f"channels 테이블: {'존재함' if channels_exists else '없음'}\n"
+            f"attendance 레코드 수: {attendance_count}\n"
+            f"channels 레코드 수: {channels_count}"
+        )
+        
+        await interaction.response.send_message(status_message, ephemeral=True)
+        
+    except Error as e:
+        await interaction.response.send_message(
+            f"❌ 데이터베이스 쿼리 실행 중 오류 발생:\n{str(e)}", 
+            ephemeral=True
+        )
+    finally:
+        conn.close()
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
