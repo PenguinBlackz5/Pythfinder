@@ -198,28 +198,48 @@ class ClearAllView(View):
             
             # 해당 서버의 멤버 목록 가져오기
             guild = interaction.guild
-            member_ids = [member.id for member in guild.members]
+            member_ids = [member.id for member in guild.members if not member.bot]  # 봇 제외
             
-            # attendance 테이블에서 해당 서버 멤버들의 데이터만 초기화
-            cur.execute('''
+            if not member_ids:  # 멤버가 없는 경우 처리
+                await interaction.response.edit_message(
+                    content="초기화할 멤버가 없습니다.", 
+                    view=None
+                )
+                return
+            
+            # 디버깅을 위한 로그
+            print(f"초기화 대상 멤버 수: {len(member_ids)}")
+            print(f"초기화 대상 멤버 ID: {member_ids}")
+            
+            # IN 연산자를 사용하여 해당 서버 멤버들의 데이터 초기화
+            member_ids_str = ','.join(str(id) for id in member_ids)
+            cur.execute(f'''
                 DELETE FROM attendance 
-                WHERE user_id = ANY(%s)
-            ''', (member_ids,))
+                WHERE user_id IN ({member_ids_str})
+                RETURNING user_id
+            ''')
             
-            deleted_count = cur.rowcount  # 삭제된 레코드 수
+            deleted_rows = cur.fetchall()
+            deleted_count = len(deleted_rows)
+            
+            # 디버깅을 위한 로그
+            print(f"삭제된 레코드 수: {deleted_count}")
+            print(f"삭제된 user_id 목록: {[row[0] for row in deleted_rows]}")
+            
             conn.commit()
             
             await interaction.response.edit_message(
                 content=f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
                 f"- 총 {deleted_count}명의 데이터가 초기화되었습니다.\n"
-                f"- 서버: {guild.name}", 
+                f"- 서버: {guild.name}\n"
+                f"- 초기화된 멤버 수: {deleted_count}/{len(member_ids)}", 
                 view=None
             )
             
         except Exception as e:
             print(f"데이터베이스 초기화 중 오류 발생: {e}")
             await interaction.response.edit_message(
-                content="❌ 데이터 초기화 중 오류가 발생했습니다.", 
+                content=f"❌ 데이터 초기화 중 오류가 발생했습니다.\n에러: {str(e)}", 
                 view=None
             )
         finally:
