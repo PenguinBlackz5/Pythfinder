@@ -198,41 +198,62 @@ class ClearAllView(View):
             
             # 해당 서버의 멤버 목록 가져오기
             guild = interaction.guild
-            member_ids = [member.id for member in guild.members if not member.bot]  # 봇 제외
             
-            if not member_ids:  # 멤버가 없는 경우 처리
+            # 멤버 목록이 제대로 가져와지는지 확인
+            print(f"서버 이름: {guild.name}")
+            print(f"서버 멤버 수: {guild.member_count}")
+            
+            # 멤버 목록 가져오기 (봇 제외)
+            member_ids = [member.id for member in guild.members if not member.bot]
+            
+            print(f"필터링된 멤버 수: {len(member_ids)}")
+            print(f"멤버 ID 목록: {member_ids}")
+            
+            if not member_ids:
                 await interaction.response.edit_message(
-                    content="초기화할 멤버가 없습니다.", 
+                    content="❌ 멤버 목록을 가져올 수 없습니다.", 
                     view=None
                 )
                 return
             
-            # 디버깅을 위한 로그
-            print(f"초기화 대상 멤버 수: {len(member_ids)}")
-            print(f"초기화 대상 멤버 ID: {member_ids}")
+            # 현재 데이터베이스 상태 확인
+            cur.execute('SELECT COUNT(*) FROM attendance')
+            total_records = cur.fetchone()[0]
+            print(f"초기화 전 전체 레코드 수: {total_records}")
             
-            # IN 연산자를 사용하여 해당 서버 멤버들의 데이터 초기화
+            # IN 연산자를 사용하여 해당 서버 멤버들의 데이터 삭제
             member_ids_str = ','.join(str(id) for id in member_ids)
-            cur.execute(f'''
+            delete_query = f'''
                 DELETE FROM attendance 
                 WHERE user_id IN ({member_ids_str})
                 RETURNING user_id
-            ''')
+            '''
+            print(f"실행될 쿼리: {delete_query}")
             
+            cur.execute(delete_query)
             deleted_rows = cur.fetchall()
             deleted_count = len(deleted_rows)
             
-            # 디버깅을 위한 로그
+            # 삭제 후 데이터베이스 상태 확인
+            cur.execute('SELECT COUNT(*) FROM attendance')
+            remaining_records = cur.fetchone()[0]
+            
             print(f"삭제된 레코드 수: {deleted_count}")
             print(f"삭제된 user_id 목록: {[row[0] for row in deleted_rows]}")
+            print(f"남은 레코드 수: {remaining_records}")
             
             conn.commit()
             
-            await interaction.response.edit_message(
-                content=f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
-                f"- 총 {deleted_count}명의 데이터가 초기화되었습니다.\n"
+            status_message = (
+                f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
                 f"- 서버: {guild.name}\n"
-                f"- 초기화된 멤버 수: {deleted_count}/{len(member_ids)}", 
+                f"- 처리된 멤버 수: {len(member_ids)}명\n"
+                f"- 삭제된 데이터 수: {deleted_count}개\n"
+                f"- 전체 레코드 변화: {total_records} → {remaining_records}"
+            )
+            
+            await interaction.response.edit_message(
+                content=status_message,
                 view=None
             )
             
@@ -257,8 +278,10 @@ class ClearAllView(View):
 
 class AttendanceBot(commands.Bot):
     def __init__(self):
+        # members 인텐트 추가
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True  # 멤버 목록 접근 권한 추가
         super().__init__(command_prefix='!', intents=intents)
         
         print("봇 초기화 시작...")
@@ -650,13 +673,13 @@ async def clear_all_cache(interaction: discord.Interaction):
     guild = interaction.guild
     view = ClearAllView(interaction.user.id, guild.id)
     
-    # 서버 멤버 수 확인
+    # 멤버 수 확인 (봇 제외)
     member_count = len([member for member in guild.members if not member.bot])
     
     await interaction.response.send_message(
         f"⚠️ **정말로 이 서버의 출석 데이터를 초기화하시겠습니까?**\n\n"
         f"**서버: {guild.name}**\n"
-        f"**영향 받는 멤버: 약 {member_count}명**\n\n"
+        f"**영향 받는 멤버: {member_count}명**\n\n"
         "다음 데이터가 초기화됩니다:\n"
         "- 서버 멤버들의 출석 정보\n"
         "- 서버 멤버들의 연속 출석 일수\n"
