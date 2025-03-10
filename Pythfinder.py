@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import pytz
 from discord.ui import Button, View
+import os
 
 # 한국 시간대 설정
 KST = pytz.timezone('Asia/Seoul')
@@ -25,7 +26,8 @@ class ConfirmView(View):
         self.stop()
         
         # 데이터베이스에서 사용자의 출석 정보만 초기화
-        conn = sqlite3.connect('attendance.db')
+        db_path = '/tmp/attendance.db'
+        conn = sqlite3.connect(db_path)
         c = conn.cursor()
         
         # 현재 보유 금액 확인
@@ -71,7 +73,8 @@ class MoneyResetView(View):
         self.value = True
         self.stop()
         
-        conn = sqlite3.connect('attendance.db')
+        db_path = '/tmp/attendance.db'
+        conn = sqlite3.connect(db_path)
         c = conn.cursor()
         
         # 현재 출석 정보 확인
@@ -132,7 +135,9 @@ class AttendanceBot(commands.Bot):
             print(f'슬래시 명령어 동기화 중 오류 발생: {e}')
         
     def init_database(self):
-        conn = sqlite3.connect('attendance.db')
+        # 데이터베이스 파일 경로를 /tmp 디렉토리로 변경
+        db_path = '/tmp/attendance.db'
+        conn = sqlite3.connect(db_path)
         c = conn.cursor()
         
         # 기존 테이블 삭제
@@ -153,7 +158,9 @@ class AttendanceBot(commands.Bot):
         conn.close()
     
     def load_attendance_channels(self):
-        conn = sqlite3.connect('attendance.db')
+        # 데이터베이스 파일 경로를 /tmp 디렉토리로 변경
+        db_path = '/tmp/attendance.db'
+        conn = sqlite3.connect(db_path)
         c = conn.cursor()
         c.execute('SELECT channel_id FROM channels')
         channels = c.fetchall()
@@ -183,7 +190,8 @@ async def set_attendance_channel(interaction: discord.Interaction):
         
     channel_id = interaction.channel_id
     
-    conn = sqlite3.connect('attendance.db')
+    db_path = '/tmp/attendance.db'
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
     try:
@@ -201,7 +209,8 @@ async def check_attendance(interaction: discord.Interaction):
     user_id = interaction.user.id
     today = datetime.now(KST).strftime('%Y-%m-%d')  # KST 기준 오늘 날짜
     
-    conn = sqlite3.connect('attendance.db')
+    db_path = '/tmp/attendance.db'
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
     c.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = ?', (user_id,))
@@ -234,7 +243,8 @@ async def check_attendance(interaction: discord.Interaction):
 async def check_balance(interaction: discord.Interaction):
     user_id = interaction.user.id
     
-    conn = sqlite3.connect('attendance.db')
+    db_path = '/tmp/attendance.db'
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
     c.execute('SELECT money FROM attendance WHERE user_id = ?', (user_id,))
@@ -262,7 +272,8 @@ async def on_message(message):
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
     
-    conn = sqlite3.connect('attendance.db')
+    db_path = '/tmp/attendance.db'
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
     try:
@@ -353,4 +364,11 @@ async def reset_money(interaction: discord.Interaction):
         ephemeral=True
     )
 
-bot.run('MTM0NzA2MDYxMzg4MDM0ODY3Mg.GXYDE2.gCv4UMgpzzhcbBaywfiEXI00P1YZRIZaUnbxHo')
+# 봇 실행 부분 수정
+if __name__ == "__main__":
+    # 환경 변수에서 토큰 가져오기
+    TOKEN = os.getenv('DISCORD_TOKEN')
+    if not TOKEN:
+        raise ValueError("DISCORD_TOKEN 환경 변수가 설정되지 않았습니다!")
+    
+    bot.run(TOKEN)
