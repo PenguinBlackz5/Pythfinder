@@ -374,7 +374,12 @@ async def check_balance(interaction: discord.Interaction):
 
 @bot.event
 async def on_message(message):
-    if message.author.bot or message.channel.id not in bot.attendance_channels:
+    # 봇 메시지 무시
+    if message.author.bot:
+        return
+        
+    # 출석 채널이 아니면 무시
+    if message.channel.id not in bot.attendance_channels:
         return
         
     user_id = message.author.id
@@ -397,7 +402,7 @@ async def on_message(message):
             current_money = result[2]
             
             # 이미 오늘 출석했는지 확인
-            if last_attendance == today:
+            if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
                 tomorrow = datetime.now(KST) + timedelta(days=1)
                 tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
                 current_time = datetime.now(KST)
@@ -411,11 +416,11 @@ async def on_message(message):
                     f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
                     delete_after=10
                 )
-                return
+                return  # 여기서 함수 종료
                 
             # 연속 출석 확인
             yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
-            if last_attendance == yesterday:
+            if last_attendance and last_attendance.strftime('%Y-%m-%d') == yesterday:
                 streak = current_streak + 1
             else:
                 streak = 1
@@ -436,23 +441,31 @@ async def on_message(message):
             INSERT INTO attendance (user_id, last_attendance, streak, money)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE 
-            SET last_attendance = %s, streak = %s, money = attendance.money + 10
+            SET last_attendance = %s, 
+                streak = %s, 
+                money = attendance.money + 10
         ''', (user_id, today, streak, current_money + 10, today, streak))
         
         conn.commit()
         
-        await message.channel.send(
+        # 출석 메시지 전송 (한 번만)
+        sent_message = await message.channel.send(
             f"🎉 {message.author.mention}님 출석하셨습니다!\n"
             f"오늘 {attendance_order}번째 출석이에요.\n"
             f"현재 {streak}일 연속 출석 중입니다!\n"
             f"💰 출석 보상 10원이 지급되었습니다."
         )
         
-    except Error as e:
+    except Exception as e:
         print(f"출석 처리 중 오류 발생: {e}")
-        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.")
+        
     finally:
-        conn.close()
+        if conn:
+            conn.close()
+
+    # 기존 명령어 처리를 위한 이벤트 추가
+    await bot.process_commands(message)
 
 @bot.tree.command(name="출석초기화", description="연속 출석 일수를 초기화합니다. (보유 금액은 유지)")
 async def reset_attendance(interaction: discord.Interaction):
