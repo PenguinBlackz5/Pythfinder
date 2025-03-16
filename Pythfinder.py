@@ -11,6 +11,8 @@ import os
 from flask import Flask
 import threading
 from dotenv import load_dotenv
+import requests  # 새로 추가
+import time    # 새로 추가
 
 # 환경변수 로드
 load_dotenv()
@@ -801,11 +803,27 @@ async def check_db_structure(interaction: discord.Interaction):
     finally:
         conn.close()
 
+def keep_alive():
+    """15분마다 자체 서버에 핑을 보내 슬립모드 방지"""
+    while True:
+        try:
+            # Render에서 제공하는 URL 환경변수 사용
+            url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:8080')
+            response = requests.get(url)
+            print(f"서버 핑 전송 완료: {response.status_code}")
+        except Exception as e:
+            print(f"서버 핑 전송 실패: {e}")
+        time.sleep(840)  # 14분(840초)마다 실행 (15분보다 약간 짧게 설정)
+
 # 봇 실행 부분 수정
 if __name__ == "__main__":
     # Flask 서버를 별도 스레드에서 실행
     server_thread = threading.Thread(target=run_flask)
     server_thread.start()
+    
+    # 핑 전송을 위한 새로운 스레드 시작
+    ping_thread = threading.Thread(target=keep_alive, daemon=True)
+    ping_thread.start()
 
     # 봇 토큰 설정 및 실행
     TOKEN = os.getenv('DISCORD_TOKEN')
