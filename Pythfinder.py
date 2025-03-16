@@ -1052,6 +1052,17 @@ async def check_server_attendance(interaction: discord.Interaction):
         if conn:
             conn.close()
 
+@bot.tree.command(name="랭킹", description="서버의 출석/보유금액 랭킹을 확인합니다.")
+async def check_ranking(interaction: discord.Interaction):
+    view = RankingView(interaction.user.id)
+    await interaction.response.send_message(
+        "📊 **확인하고 싶은 랭킹을 선택해주세요!**\n\n"
+        "1️⃣ 출석 랭킹: 연속 출석 일수 기준 TOP 10\n"
+        "2️⃣ 보유 금액 랭킹: 보유 금액 기준 TOP 10",
+        view=view,
+        ephemeral=True
+    )
+
 def keep_alive():
     """15분마다 자체 서버에 핑을 보내 슬립모드 방지"""
     while True:
