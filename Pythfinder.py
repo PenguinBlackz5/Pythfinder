@@ -803,6 +803,108 @@ async def check_db_structure(interaction: discord.Interaction):
     finally:
         conn.close()
 
+@bot.tree.command(name="출석현황", description="서버 멤버들의 출석 현황을 확인합니다. (개발자 전용)")
+async def check_server_attendance(interaction: discord.Interaction):
+    # 개발자 권한 확인
+    if interaction.user.id not in DEVELOPER_IDS:
+        await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+        return
+
+    # DM에서 실행 방지
+    if not interaction.guild:
+        await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        guild = interaction.guild
+        await guild.chunk()  # 멤버 목록 다시 로드
+        
+        conn = get_db_connection()
+        if not conn:
+            await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+            return
+
+        cur = conn.cursor()
+        
+        # 현재 날짜 (KST)
+        today = datetime.now(KST).strftime('%Y-%m-%d')
+        
+        # 서버 멤버들의 출석 정보 조회
+        member_ids = [member.id for member in guild.members if not member.bot]
+        member_id_str = ','.join(str(id) for id in member_ids)
+        
+        if not member_ids:
+            await interaction.followup.send("서버에 멤버가 없습니다.", ephemeral=True)
+            return
+            
+        cur.execute(f'''
+            SELECT 
+                user_id,
+                last_attendance,
+                streak,
+                money
+            FROM attendance 
+            WHERE user_id IN ({member_id_str})
+            ORDER BY streak DESC, money DESC
+        ''')
+        
+        results = cur.fetchall()
+        
+        # 통계 계산
+        registered_members = len(results)
+        today_attendance = sum(1 for r in results if r[1] and r[1].strftime('%Y-%m-%d') == today)
+        total_money = sum(r[3] for r in results if r[3])
+        
+        # 메시지 구성
+        message = f"📊 **{guild.name} 서버 출석 현황**\n\n"
+        
+        # 통계 정보
+        message += "**📈 통계**\n"
+        message += f"등록 멤버: {registered_members}명\n"
+        message += f"오늘 출석: {today_attendance}명\n"
+        message += f"전체 보유 금액: {total_money}원\n\n"
+        
+        # 멤버별 상세 정보
+        message += "**👥 멤버별 현황**\n"
+        message += "```\n"
+        message += "닉네임         연속출석  마지막출석    보유금액\n"
+        message += "------------------------------------------------\n"
+        
+        for user_id, last_attendance, streak, money in results:
+            member = guild.get_member(user_id)
+            if member:
+                name = member.display_name[:10] + "..." if len(member.display_name) > 10 else member.display_name.ljust(10)
+                last_date = last_attendance.strftime('%Y-%m-%d') if last_attendance else "없음"
+                streak = streak or 0
+                money = money or 0
+                
+                message += f"{name:<13} {streak:<8} {last_date:<12} {money:>6}원\n"
+        
+        message += "```\n"
+        
+        # 메시지가 너무 길 경우 분할 전송
+        if len(message) > 2000:
+            parts = [message[i:i+1990] for i in range(0, len(message), 1990)]
+            for i, part in enumerate(parts):
+                if i == 0:
+                    await interaction.followup.send(part, ephemeral=True)
+                else:
+                    await interaction.followup.send(part, ephemeral=True)
+        else:
+            await interaction.followup.send(message, ephemeral=True)
+            
+    except Exception as e:
+        print(f"출석 현황 조회 중 오류 발생: {e}")
+        await interaction.followup.send(
+            f"❌ 출석 현황 조회 중 오류가 발생했습니다.\n```{str(e)}```", 
+            ephemeral=True
+        )
+    finally:
+        if conn:
+            conn.close()
+
 def keep_alive():
     """15분마다 자체 서버에 핑을 보내 슬립모드 방지"""
     while True:
