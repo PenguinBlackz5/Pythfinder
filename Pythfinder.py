@@ -408,13 +408,14 @@ class RankingView(View):
 
 class AttendanceBot(commands.Bot):
     def __init__(self):
+        print("\n=== 봇 초기화 시작 ===")
         # members 인텐트 추가
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True  # 멤버 목록 접근 권한 추가
         super().__init__(command_prefix='!', intents=intents)
         
-        print("봇 초기화 시작...")
+        print("봇 인스턴스 생성 완료")
         self.init_database()
         self.attendance_channels = set()
         self.load_attendance_channels()
@@ -423,6 +424,7 @@ class AttendanceBot(commands.Bot):
         self.message_history = {}  # 메시지 히스토리 추가
         self.last_processed_message = None  # 마지막으로 처리한 메시지 ID 추가
         self.message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합 추가
+        print("=== 봇 초기화 완료 ===\n")
 
     async def setup_hook(self):
         # 슬래시 명령어 동기화
@@ -497,11 +499,17 @@ bot = AttendanceBot()
 
 @bot.event
 async def on_ready():
-    print(f'{bot.user}로 로그인했습니다!')
+    print(f'\n=== 봇 로그인 완료 ===')
+    print(f'봇 이름: {bot.user}')
+    print(f'봇 ID: {bot.user.id}')
+    print(f'서버 수: {len(bot.guilds)}')
+    print(f'캐시된 메시지 수: {len(bot.message_sent)}')
+    print(f'처리 중인 메시지 수: {len(bot.processing_messages)}')
+    print('=====================\n')
     
     # 봇이 시작될 때 명령어 동기화 상태 확인
     try:
-        print("봇 시작 시 명령어 동기화 시도...")
+        print("슬래시 명령어 동기화 시작...")
         synced = await bot.tree.sync()
         print(f'명령어 동기화 완료! {len(synced)}개의 명령어가 동기화되었습니다.')
         # 동기화된 명령어 목록 출력
@@ -623,16 +631,26 @@ async def on_message(message):
     if message.channel.id not in bot.attendance_channels:
         return
         
+    print(f"\n=== 메시지 처리 시작 ===")
+    print(f"메시지 ID: {message.id}")
+    print(f"작성자: {message.author.name}")
+    print(f"채널: {message.channel.name}")
+    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}")
+    print(f"전송된 메시지 수: {len(bot.message_sent)}")
+    
     # 이미 처리 중인 메시지인 경우 무시
     if message.id in bot.processing_messages:
+        print("이미 처리 중인 메시지입니다. 무시합니다.")
         return
         
     # 이미 메시지를 전송한 경우 무시
     if message.id in bot.message_sent:
+        print("이미 전송된 메시지입니다. 무시합니다.")
         return
         
     # 메시지 ID를 처리 중인 메시지 집합에 추가
     bot.processing_messages.add(message.id)
+    print("메시지 처리 시작")
     
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
@@ -644,13 +662,17 @@ async def on_message(message):
         current_time = datetime.now(KST)
         time_diff = (current_time - last_message_time).total_seconds()
         
+        print(f"마지막 메시지로부터 {time_diff}초 경과")
+        
         # 5초 이내에 같은 사용자의 메시지가 있다면 무시
         if time_diff < 5:
+            print("5초 이내의 중복 메시지입니다. 무시합니다.")
             bot.processing_messages.remove(message.id)
             return
     
     # 캐시에서 오늘 출석 여부 확인
     if cache_key in bot.attendance_cache:
+        print("캐시에서 출석 정보 확인됨")
         tomorrow = datetime.now(KST) + timedelta(days=1)
         tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
         current_time = datetime.now(KST)
@@ -661,6 +683,7 @@ async def on_message(message):
         
         # 메시지 전송 전에 ID를 저장
         bot.message_sent.add(message.id)
+        print("중복 출석 메시지 전송")
         
         await message.channel.send(
             f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
@@ -668,10 +691,12 @@ async def on_message(message):
             delete_after=3
         )
         bot.processing_messages.remove(message.id)
+        print("=== 메시지 처리 완료 ===\n")
         return
     
     conn = get_db_connection()
     if not conn:
+        print("데이터베이스 연결 실패")
         bot.processing_messages.remove(message.id)
         return
 
@@ -689,6 +714,7 @@ async def on_message(message):
             
             # 이미 오늘 출석했는지 확인
             if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
+                print("데이터베이스에서 중복 출석 확인됨")
                 # 캐시에 출석 정보 저장
                 bot.attendance_cache[cache_key] = True
                 bot.message_history[cache_key] = datetime.now(KST)
@@ -703,6 +729,7 @@ async def on_message(message):
                 
                 # 메시지 전송 전에 ID를 저장
                 bot.message_sent.add(message.id)
+                print("중복 출석 메시지 전송")
                 
                 await message.channel.send(
                     f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
@@ -747,6 +774,7 @@ async def on_message(message):
         
         # 메시지 전송 전에 ID를 저장
         bot.message_sent.add(message.id)
+        print("출석 성공 메시지 전송")
         
         # 출석 메시지 전송 (한 번만)
         sent_message = await message.channel.send(
@@ -765,6 +793,7 @@ async def on_message(message):
             conn.close()
         # 처리 중인 메시지 집합에서 제거
         bot.processing_messages.remove(message.id)
+        print("=== 메시지 처리 완료 ===\n")
 
     # 기존 명령어 처리를 위한 이벤트 추가
     await bot.process_commands(message)
