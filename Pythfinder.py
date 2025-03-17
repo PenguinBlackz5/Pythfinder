@@ -785,8 +785,13 @@ async def set_attendance_channel(interaction: discord.Interaction):
         conn.commit()
         
         # 메모리 캐시 업데이트
-        bot.attendance_channels = set(channel[0] for channel in c.execute('SELECT channel_id FROM channels'))
-        print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)
+        c.execute('SELECT channel_id FROM channels')
+        channels = c.fetchall()
+        if channels:
+            bot.attendance_channels = set(channel[0] for channel in channels)
+            print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)
+        else:
+            print("등록된 채널이 없습니다.", flush=True)
         
         await interaction.followup.send(
             f"✅ 이 채널이 출석 채널로 지정되었습니다!\n"
