@@ -419,6 +419,7 @@ class AttendanceBot(commands.Bot):
         self.attendance_channels = set()
         self.load_attendance_channels()
         self.processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합 추가
+        self.attendance_cache = {}  # 출석 캐시 추가
 
     async def setup_hook(self):
         # 슬래시 명령어 동기화
@@ -629,9 +630,28 @@ async def on_message(message):
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
     
+    # 캐시에서 오늘 출석 여부 확인
+    cache_key = f"{user_id}_{today}"
+    if cache_key in bot.attendance_cache:
+        tomorrow = datetime.now(KST) + timedelta(days=1)
+        tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        current_time = datetime.now(KST)
+        time_until_next = tomorrow - current_time
+        
+        hours = int(time_until_next.total_seconds() // 3600)
+        minutes = int((time_until_next.total_seconds() % 3600) // 60)
+        
+        await message.channel.send(
+            f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
+            f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
+            delete_after=3
+        )
+        bot.processing_messages.remove(message.id)
+        return
+    
     conn = get_db_connection()
     if not conn:
-        bot.processing_messages.remove(message.id)  # 처리 중인 메시지 집합에서 제거
+        bot.processing_messages.remove(message.id)
         return
 
     try:
@@ -648,6 +668,9 @@ async def on_message(message):
             
             # 이미 오늘 출석했는지 확인
             if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
+                # 캐시에 출석 정보 저장
+                bot.attendance_cache[cache_key] = True
+                
                 tomorrow = datetime.now(KST) + timedelta(days=1)
                 tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
                 current_time = datetime.now(KST)
@@ -661,7 +684,7 @@ async def on_message(message):
                     f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
                     delete_after=3
                 )
-                return  # 여기서 함수 종료
+                return
                 
             # 연속 출석 확인
             yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -692,6 +715,9 @@ async def on_message(message):
         ''', (user_id, today, streak, current_money + 10, today, streak))
         
         conn.commit()
+        
+        # 캐시에 출석 정보 저장
+        bot.attendance_cache[cache_key] = True
         
         # 출석 메시지 전송 (한 번만)
         sent_message = await message.channel.send(
