@@ -767,6 +767,7 @@ async def set_attendance_channel(interaction: discord.Interaction):
 
 @bot.tree.command(name="출석정보", description="자신의 출석 현황을 확인합니다.")
 async def check_attendance(interaction: discord.Interaction):
+    conn = None  # conn 변수를 미리 초기화
     try:
         # 먼저 응답 대기 상태를 알림
         await interaction.response.defer(ephemeral=True)
