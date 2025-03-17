@@ -13,6 +13,7 @@ import threading
 from dotenv import load_dotenv
 import requests  # 새로 추가
 import time    # 새로 추가
+import sys
 
 # 환경변수 로드
 load_dotenv()
@@ -406,14 +407,14 @@ class RankingView(View):
 
 class AttendanceBot(commands.Bot):
     def __init__(self):
-        print("\n=== 봇 초기화 시작 ===")
+        print("\n=== 봇 초기화 시작 ===", flush=True)
         # members 인텐트 추가
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True  # 멤버 목록 접근 권한 추가
         super().__init__(command_prefix='!', intents=intents)
         
-        print("봇 인스턴스 생성 완료")
+        print("봇 인스턴스 생성 완료", flush=True)
         self._db_initialized = False  # 데이터베이스 초기화 상태 추적
         self.init_database()
         self.attendance_channels = set()
@@ -423,42 +424,42 @@ class AttendanceBot(commands.Bot):
         self.message_history = {}  # 메시지 히스토리 추가
         self.last_processed_message = None  # 마지막으로 처리한 메시지 ID 추가
         self.message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합 추가
-        print("=== 봇 초기화 완료 ===\n")
+        print("=== 봇 초기화 완료 ===\n", flush=True)
 
     async def setup_hook(self):
-        print("\n=== 이벤트 핸들러 등록 시작 ===")
+        print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
         # 슬래시 명령어 동기화
         try:
-            print("슬래시 명령어 동기화 시작...")
+            print("슬래시 명령어 동기화 시작...", flush=True)
             synced = await self.tree.sync()
-            print(f"동기화된 슬래시 명령어: {len(synced)}개")
+            print(f"동기화된 슬래시 명령어: {len(synced)}개", flush=True)
             # 동기화된 명령어 목록 출력
             for cmd in synced:
-                print(f"- {cmd.name}")
+                print(f"- {cmd.name}", flush=True)
         except Exception as e:
-            print(f"슬래시 명령어 동기화 중 오류 발생: {e}")
-        print("=== 이벤트 핸들러 등록 완료 ===\n")
+            print(f"슬래시 명령어 동기화 중 오류 발생: {e}", flush=True)
+        print("=== 이벤트 핸들러 등록 완료 ===\n", flush=True)
 
     async def on_ready(self):
-        print("\n" + "="*50)
-        print("봇이 준비되었습니다!")
-        print(f"봇 이름: {self.user}")
-        print(f"봇 ID: {self.user.id}")
-        print(f"서버 수: {len(self.guilds)}")
-        print(f"캐시된 메시지 수: {len(self.message_sent)}")
-        print(f"처리 중인 메시지 수: {len(self.processing_messages)}")
-        print("="*50 + "\n")
+        print("\n" + "="*50, flush=True)
+        print("봇이 준비되었습니다!", flush=True)
+        print(f"봇 이름: {self.user}", flush=True)
+        print(f"봇 ID: {self.user.id}", flush=True)
+        print(f"서버 수: {len(self.guilds)}", flush=True)
+        print(f"캐시된 메시지 수: {len(self.message_sent)}", flush=True)
+        print(f"처리 중인 메시지 수: {len(self.processing_messages)}", flush=True)
+        print("="*50 + "\n", flush=True)
         
         # 봇이 시작될 때 명령어 동기화 상태 확인
         try:
-            print("슬래시 명령어 동기화 시작...")
+            print("슬래시 명령어 동기화 시작...", flush=True)
             synced = await self.tree.sync()
-            print(f'명령어 동기화 완료! {len(synced)}개의 명령어가 동기화되었습니다.')
+            print(f'명령어 동기화 완료! {len(synced)}개의 명령어가 동기화되었습니다.', flush=True)
             # 동기화된 명령어 목록 출력
             for cmd in synced:
-                print(f"- {cmd.name}")
+                print(f"- {cmd.name}", flush=True)
         except Exception as e:
-            print(f'명령어 동기화 중 오류 발생: {e}')
+            print(f'명령어 동기화 중 오류 발생: {e}', flush=True)
 
     def init_database(self):
         if self._db_initialized:
@@ -1184,21 +1185,21 @@ def keep_alive():
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
-    print("\n=== 봇 시작 ===")
+    print("\n=== 봇 시작 ===", flush=True)
     # Flask 서버를 별도 스레드에서 실행
     server_thread = threading.Thread(target=run_flask)
     server_thread.start()
-    print("Flask 서버 스레드 시작됨")
+    print("Flask 서버 스레드 시작됨", flush=True)
     
     # 핑 전송을 위한 새로운 스레드 시작
     ping_thread = threading.Thread(target=keep_alive, daemon=True)
     ping_thread.start()
-    print("핑 전송 스레드 시작됨")
+    print("핑 전송 스레드 시작됨", flush=True)
 
     # 봇 토큰 설정 및 실행
     TOKEN = os.getenv('DISCORD_TOKEN')
     if not TOKEN:
         raise ValueError("DISCORD_TOKEN 환경 변수가 설정되지 않았습니다!")
     
-    print("봇 실행 시작...")
+    print("봇 실행 시작...", flush=True)
     bot.run(TOKEN)
