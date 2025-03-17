@@ -422,6 +422,7 @@ class AttendanceBot(commands.Bot):
         self.attendance_cache = {}  # 출석 캐시 추가
         self.message_history = {}  # 메시지 히스토리 추가
         self.last_processed_message = None  # 마지막으로 처리한 메시지 ID 추가
+        self.message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합 추가
 
     async def setup_hook(self):
         # 슬래시 명령어 동기화
@@ -626,13 +627,12 @@ async def on_message(message):
     if message.id in bot.processing_messages:
         return
         
-    # 마지막으로 처리한 메시지와 동일한 경우 무시
-    if bot.last_processed_message == message.id:
+    # 이미 메시지를 전송한 경우 무시
+    if message.id in bot.message_sent:
         return
         
     # 메시지 ID를 처리 중인 메시지 집합에 추가
     bot.processing_messages.add(message.id)
-    bot.last_processed_message = message.id
     
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
@@ -658,6 +658,9 @@ async def on_message(message):
         
         hours = int(time_until_next.total_seconds() // 3600)
         minutes = int((time_until_next.total_seconds() % 3600) // 60)
+        
+        # 메시지 전송 전에 ID를 저장
+        bot.message_sent.add(message.id)
         
         await message.channel.send(
             f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
@@ -697,6 +700,9 @@ async def on_message(message):
                 
                 hours = int(time_until_next.total_seconds() // 3600)
                 minutes = int((time_until_next.total_seconds() % 3600) // 60)
+                
+                # 메시지 전송 전에 ID를 저장
+                bot.message_sent.add(message.id)
                 
                 await message.channel.send(
                     f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
@@ -738,6 +744,9 @@ async def on_message(message):
         # 캐시에 출석 정보 저장
         bot.attendance_cache[cache_key] = True
         bot.message_history[cache_key] = datetime.now(KST)
+        
+        # 메시지 전송 전에 ID를 저장
+        bot.message_sent.add(message.id)
         
         # 출석 메시지 전송 (한 번만)
         sent_message = await message.channel.send(
