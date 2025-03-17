@@ -421,13 +421,31 @@ class AttendanceBot(commands.Bot):
         self.init_database()
         self.attendance_channels = set()
         self.load_attendance_channels()
-        self.processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합 추가
-        self.attendance_cache = {}  # 출석 캐시 추가
-        self.message_history = {}  # 메시지 히스토리 추가
-        self.last_processed_message = None  # 마지막으로 처리한 메시지 ID 추가
-        self.message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합 추가
+        
+        # 메시지 처리 관련 집합들을 클래스 변수로 초기화
+        self._processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합
+        self._message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합
+        self._attendance_cache = {}  # 출석 캐시
+        self._message_history = {}  # 메시지 히스토리
+        
         print("=== 봇 초기화 완료 ===\n", flush=True)
         sys.stdout.flush()
+
+    @property
+    def processing_messages(self):
+        return self._processing_messages
+
+    @property
+    def message_sent(self):
+        return self._message_sent
+
+    @property
+    def attendance_cache(self):
+        return self._attendance_cache
+
+    @property
+    def message_history(self):
+        return self._message_history
 
     async def setup_hook(self):
         print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
@@ -670,7 +688,7 @@ async def on_message(message):
         today = datetime.now(KST).strftime('%Y-%m-%d')
         cache_key = f"{user_id}_{today}"
         
-        # 5. 메시지 히스토리 확인 (5초 이내 중복 방지)
+        # 6. 메시지 히스토리 확인 (5초 이내 중복 방지)
         if cache_key in bot.message_history:
             last_message_time = bot.message_history[cache_key]
             current_time = datetime.now(KST)
@@ -680,9 +698,10 @@ async def on_message(message):
             
             if time_diff < 5:
                 print("5초 이내의 중복 메시지입니다. 무시합니다.", flush=True)
+                bot.processing_messages.remove(message.id)
                 return
         
-        # 6. 캐시에서 출석 여부 확인
+        # 7. 캐시에서 출석 여부 확인
         if cache_key in bot.attendance_cache:
             print("캐시에서 출석 정보 확인됨", flush=True)
             tomorrow = datetime.now(KST) + timedelta(days=1)
@@ -707,7 +726,7 @@ async def on_message(message):
             )
             return
         
-        # 7. 데이터베이스 연결 및 처리
+        # 8. 데이터베이스 연결 및 처리
         conn = get_db_connection()
         if not conn:
             print("데이터베이스 연결 실패", flush=True)
