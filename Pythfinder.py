@@ -408,6 +408,7 @@ class RankingView(View):
 class AttendanceBot(commands.Bot):
     def __init__(self):
         print("\n=== 봇 초기화 시작 ===", flush=True)
+        sys.stdout.flush()
         # members 인텐트 추가
         intents = discord.Intents.default()
         intents.message_content = True
@@ -415,6 +416,7 @@ class AttendanceBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents)
         
         print("봇 인스턴스 생성 완료", flush=True)
+        sys.stdout.flush()
         self._db_initialized = False  # 데이터베이스 초기화 상태 추적
         self.init_database()
         self.attendance_channels = set()
@@ -425,6 +427,7 @@ class AttendanceBot(commands.Bot):
         self.last_processed_message = None  # 마지막으로 처리한 메시지 ID 추가
         self.message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합 추가
         print("=== 봇 초기화 완료 ===\n", flush=True)
+        sys.stdout.flush()
 
     async def setup_hook(self):
         print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
@@ -463,19 +466,24 @@ class AttendanceBot(commands.Bot):
 
     def init_database(self):
         if self._db_initialized:
-            print("데이터베이스가 이미 초기화되어 있습니다.")
+            print("데이터베이스가 이미 초기화되어 있습니다.", flush=True)
+            sys.stdout.flush()
             return
             
-        print("\n=== 데이터베이스 초기화 시작 ===")
-        print("데이터베이스 연결 시도 중...")
+        print("\n=== 데이터베이스 초기화 시작 ===", flush=True)
+        sys.stdout.flush()
+        print("데이터베이스 연결 시도 중...", flush=True)
+        sys.stdout.flush()
         conn = get_db_connection()
         if not conn:
-            print("데이터베이스 연결 실패")
+            print("데이터베이스 연결 실패", flush=True)
+            sys.stdout.flush()
             return
             
         try:
             cur = conn.cursor()
-            print("데이터베이스 연결 성공")
+            print("데이터베이스 연결 성공", flush=True)
+            sys.stdout.flush()
             
             # 테이블 생성
             cur.execute('''
@@ -486,21 +494,25 @@ class AttendanceBot(commands.Bot):
                     money INTEGER DEFAULT 0
                 )
             ''')
-            print("attendance 테이블 확인/생성 완료")
+            print("attendance 테이블 확인/생성 완료", flush=True)
+            sys.stdout.flush()
             
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS channels (
                     channel_id BIGINT PRIMARY KEY
                 )
             ''')
-            print("channels 테이블 확인/생성 완료")
+            print("channels 테이블 확인/생성 완료", flush=True)
+            sys.stdout.flush()
             
             conn.commit()
             self._db_initialized = True
-            print("=== 데이터베이스 초기화 완료 ===\n")
+            print("=== 데이터베이스 초기화 완료 ===\n", flush=True)
+            sys.stdout.flush()
             
         except Error as e:
-            print(f"데이터베이스 초기화 중 오류 발생: {e}")
+            print(f"데이터베이스 초기화 중 오류 발생: {e}", flush=True)
+            sys.stdout.flush()
         finally:
             if conn:
                 conn.close()
