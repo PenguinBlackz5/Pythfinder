@@ -1184,17 +1184,21 @@ def keep_alive():
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
+    print("\n=== 봇 시작 ===")
     # Flask 서버를 별도 스레드에서 실행
     server_thread = threading.Thread(target=run_flask)
     server_thread.start()
+    print("Flask 서버 스레드 시작됨")
     
     # 핑 전송을 위한 새로운 스레드 시작
     ping_thread = threading.Thread(target=keep_alive, daemon=True)
     ping_thread.start()
+    print("핑 전송 스레드 시작됨")
 
     # 봇 토큰 설정 및 실행
     TOKEN = os.getenv('DISCORD_TOKEN')
     if not TOKEN:
         raise ValueError("DISCORD_TOKEN 환경 변수가 설정되지 않았습니다!")
     
+    print("봇 실행 시작...")
     bot.run(TOKEN)
