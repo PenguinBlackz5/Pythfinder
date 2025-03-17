@@ -650,7 +650,7 @@ async def on_message(message):
                 await message.channel.send(
                     f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
                     f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
-                    delete_after=10
+                    delete_after=3
                 )
                 return  # 여기서 함수 종료
                 
