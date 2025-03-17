@@ -628,13 +628,6 @@ async def check_balance(interaction: discord.Interaction):
 
 @bot.event
 async def on_message(message):
-    print("\n" + "="*50, flush=True)
-    print("메시지 이벤트 발생!", flush=True)
-    print(f"메시지 ID: {message.id}", flush=True)
-    print(f"작성자: {message.author.name}", flush=True)
-    print(f"채널: {message.channel.name}", flush=True)
-    print("="*50 + "\n", flush=True)
-    
     # 봇 메시지 무시 (자신의 메시지도 무시)
     if message.author.bot or message.author.id == bot.user.id:
         print("봇 메시지 무시", flush=True)
@@ -655,6 +648,13 @@ async def on_message(message):
         print("이미 전송된 메시지입니다. 무시합니다.", flush=True)
         return
         
+    print("\n" + "="*50, flush=True)
+    print("메시지 이벤트 발생!", flush=True)
+    print(f"메시지 ID: {message.id}", flush=True)
+    print(f"작성자: {message.author.name}", flush=True)
+    print(f"채널: {message.channel.name}", flush=True)
+    print("="*50 + "\n", flush=True)
+    
     print(f"\n=== 메시지 처리 시작 ===", flush=True)
     print(f"메시지 ID: {message.id}", flush=True)
     print(f"작성자: {message.author.name}", flush=True)
