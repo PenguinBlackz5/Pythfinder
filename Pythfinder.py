@@ -628,27 +628,22 @@ async def check_balance(interaction: discord.Interaction):
 
 @bot.event
 async def on_message(message):
-    # 봇 메시지 무시 (자신의 메시지도 무시)
+    # 1. 봇 메시지 체크 (가장 먼저)
     if message.author.bot or message.author.id == bot.user.id:
         print("봇 메시지 무시", flush=True)
         return
         
-    # 출석 채널이 아니면 무시
+    # 2. 메시지 ID 기반 중복 체크
+    if message.id in bot.processing_messages or message.id in bot.message_sent:
+        print(f"이미 처리된 메시지입니다. ID: {message.id}", flush=True)
+        return
+        
+    # 3. 출석 채널 체크
     if message.channel.id not in bot.attendance_channels:
         print("출석 채널이 아님. 무시", flush=True)
         return
         
-    # 이미 처리 중인 메시지인 경우 무시
-    if message.id in bot.processing_messages:
-        print("이미 처리 중인 메시지입니다. 무시합니다.", flush=True)
-        return
-        
-    # 이미 메시지를 전송한 경우 무시
-    if message.id in bot.message_sent:
-        print("이미 전송된 메시지입니다. 무시합니다.", flush=True)
-        return
-        
-    # 메시지 ID를 처리 중인 메시지 집합에 추가
+    # 4. 메시지 처리 시작
     bot.processing_messages.add(message.id)
     
     print("\n" + "="*50, flush=True)
