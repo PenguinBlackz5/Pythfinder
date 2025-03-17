@@ -583,10 +583,19 @@ class AttendanceBot(commands.Bot):
         finally:
             conn.close()
 
-    @commands.Cog.listener()
+    @bot.event
     async def on_message(self, message):
+        print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
+        print(f"메시지 ID: {message.id}", flush=True)
+        print(f"작성자: {message.author.name}", flush=True)
+        print(f"채널: {message.channel.name}", flush=True)
+        print(f"채널 ID: {message.channel.id}", flush=True)
+        print(f"등록된 출석 채널: {self.attendance_channels}", flush=True)
+        print("="*50 + "\n", flush=True)
+
         # 봇 메시지 무시
         if message.author == self.user or message.author.bot:
+            print("봇 메시지 무시", flush=True)
             return
 
         # 명령어 처리 시도
@@ -594,10 +603,12 @@ class AttendanceBot(commands.Bot):
 
         # 출석 채널이 아닌 경우 무시
         if message.channel.id not in self.attendance_channels:
+            print("출석 채널이 아님. 무시", flush=True)
             return
 
         # 이미 처리된 메시지인지 확인
         if self.is_message_processed(message.id):
+            print("이미 처리된 메시지. 무시", flush=True)
             return
 
         try:
@@ -606,6 +617,7 @@ class AttendanceBot(commands.Bot):
 
             # 메시지 내용이 "출석"인지 확인
             if message.content.strip().lower() != "출석":
+                print("출석 메시지가 아님. 무시", flush=True)
                 return
 
             # 사용자 ID와 오늘 날짜로 캐시 키 생성
@@ -615,16 +627,19 @@ class AttendanceBot(commands.Bot):
 
             # 5초 이내의 중복 메시지인지 확인
             if self.is_duplicate_message(user_id, today):
+                print("5초 이내 중복 메시지. 무시", flush=True)
                 await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.")
                 self.mark_message_as_processed(message.id)
                 return
 
             # 이미 출석했는지 확인
             if cache_key in self.attendance_cache:
+                print("이미 출석한 사용자. 무시", flush=True)
                 await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.")
                 self.mark_message_as_processed(message.id)
                 return
 
+            print("출석 처리 시작", flush=True)
             # 출석 처리
             await self.process_attendance(message)
             
@@ -634,6 +649,7 @@ class AttendanceBot(commands.Bot):
             
             # 메시지를 처리 완료로 표시
             self.mark_message_as_processed(message.id)
+            print("출석 처리 완료", flush=True)
 
         except Exception as e:
             print(f"메시지 처리 중 오류 발생: {e}", flush=True)
