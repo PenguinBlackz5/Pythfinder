@@ -45,12 +45,10 @@ def is_admin_or_developer(interaction: discord.Interaction) -> bool:
 # 데이터베이스 연결 함수
 def get_db_connection():
     try:
-        print("데이터베이스 연결 시도 중...")  # 연결 시도 로그
         conn = psycopg2.connect(os.getenv('DATABASE_URL'))
-        print("데이터베이스 연결 성공!")  # 성공 로그
         return conn
     except Error as e:
-        print(f"데이터베이스 연결 오류: {e}")  # 상세한 에러 메시지
+        print(f"데이터베이스 연결 오류: {e}")
         return None
 
 class ConfirmView(View):
@@ -447,6 +445,7 @@ class AttendanceBot(commands.Bot):
             return
             
         print("\n=== 데이터베이스 초기화 시작 ===")
+        print("데이터베이스 연결 시도 중...")
         conn = get_db_connection()
         if not conn:
             print("데이터베이스 연결 실패")
