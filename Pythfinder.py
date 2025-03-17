@@ -583,7 +583,6 @@ class AttendanceBot(commands.Bot):
         finally:
             conn.close()
 
-    @bot.event
     async def on_message(self, message):
         print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
         print(f"메시지 ID: {message.id}", flush=True)
