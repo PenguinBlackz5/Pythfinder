@@ -597,6 +597,7 @@ class AttendanceBot(commands.Bot):
         print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
         print(f"메시지 ID: {message.id}", flush=True)
         print(f"작성자: {message.author.name}", flush=True)
+        print(f"메시지 내용: {message.content}", flush=True)  # 메시지 내용 추가
         
         # DM 채널인 경우 명령어만 처리하고 종료
         if isinstance(message.channel, discord.DMChannel):
@@ -635,11 +636,6 @@ class AttendanceBot(commands.Bot):
         try:
             # 메시지를 처리 중으로 표시
             self.mark_message_as_processing(message.id)
-
-            # 메시지 내용이 "출석"인지 확인
-            if message.content.strip().lower() != "출석":
-                print("출석 메시지가 아님. 무시", flush=True)
-                return
 
             # 사용자 ID와 오늘 날짜로 캐시 키 생성
             user_id = message.author.id
