@@ -513,6 +513,10 @@ class AttendanceBot(commands.Bot):
         print(f"서버 수: {len(self.guilds)}", flush=True)
         print(f"캐시된 메시지 수: {len(self.message_sent)}", flush=True)
         print(f"처리 중인 메시지 수: {len(self.processing_messages)}", flush=True)
+        
+        # 봇이 준비되면 출석 채널 다시 로드
+        self.load_attendance_channels()
+        
         print("="*50 + "\n", flush=True)
 
     def init_database(self):
@@ -569,8 +573,10 @@ class AttendanceBot(commands.Bot):
                 conn.close()
     
     def load_attendance_channels(self):
+        print("\n=== 출석 채널 로드 시작 ===", flush=True)
         conn = get_db_connection()
         if not conn:
+            print("데이터베이스 연결 실패", flush=True)
             return
 
         try:
@@ -578,10 +584,12 @@ class AttendanceBot(commands.Bot):
             cur.execute('SELECT channel_id FROM channels')
             channels = cur.fetchall()
             self.attendance_channels = set(channel[0] for channel in channels)
+            print(f"로드된 출석 채널: {self.attendance_channels}", flush=True)
         except Error as e:
-            print(f"채널 로드 오류: {e}")
+            print(f"채널 로드 오류: {e}", flush=True)
         finally:
             conn.close()
+        print("=== 출석 채널 로드 완료 ===\n", flush=True)
 
     async def on_message(self, message):
         print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
@@ -748,9 +756,13 @@ async def set_attendance_channel(interaction: discord.Interaction):
         return
         
     channel_id = interaction.channel_id
+    print(f"\n=== 출석 채널 설정 시도 ===", flush=True)
+    print(f"채널 ID: {channel_id}", flush=True)
+    print(f"현재 등록된 출석 채널: {bot.attendance_channels}", flush=True)
     
     conn = get_db_connection()
     if not conn:
+        print("데이터베이스 연결 실패", flush=True)
         await interaction.response.send_message("데이터베이스 연결 실패!", ephemeral=True)
         return
 
@@ -759,11 +771,15 @@ async def set_attendance_channel(interaction: discord.Interaction):
         c.execute('INSERT INTO channels (channel_id) VALUES (%s)', (channel_id,))
         conn.commit()
         bot.attendance_channels.add(channel_id)
+        print(f"채널 등록 성공: {channel_id}", flush=True)
+        print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)
         await interaction.response.send_message(f"이 채널이 출석 채널로 지정되었습니다!", ephemeral=True)
     except psycopg2.IntegrityError:
+        print(f"이미 등록된 채널: {channel_id}", flush=True)
         await interaction.response.send_message(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
     finally:
         conn.close()
+    print("=== 출석 채널 설정 완료 ===\n", flush=True)
 
 @bot.tree.command(name="출석정보", description="자신의 출석 현황을 확인합니다.")
 async def check_attendance(interaction: discord.Interaction):
