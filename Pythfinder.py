@@ -689,7 +689,8 @@ async def on_message(message):
             f"🎉 {message.author.mention}님 출석하셨습니다!\n"
             f"오늘 {attendance_order}번째 출석이에요.\n"
             f"현재 {streak}일 연속 출석 중입니다!\n"
-            f"💰 출석 보상 10원이 지급되었습니다."
+            f"�� 출석 보상 10원이 지급되었습니다.",
+            delete_after=3
         )
         
     except Exception as e:
