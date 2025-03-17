@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import requests  # 새로 추가
 import time    # 새로 추가
 import sys
+import asyncio
 
 # 환경변수 로드
 load_dotenv()
@@ -645,14 +646,18 @@ class AttendanceBot(commands.Bot):
             # 5초 이내의 중복 메시지인지 확인
             if self.is_duplicate_message(user_id, today):
                 print("5초 이내 중복 메시지. 무시", flush=True)
-                await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.")
+                msg = await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.", ephemeral=True)
+                await asyncio.sleep(3)
+                await msg.delete()
                 self.mark_message_as_processed(message.id)
                 return
 
             # 이미 출석했는지 확인
             if cache_key in self.attendance_cache:
                 print("이미 출석한 사용자. 무시", flush=True)
-                await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.")
+                msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", ephemeral=True)
+                await asyncio.sleep(3)
+                await msg.delete()
                 self.mark_message_as_processed(message.id)
                 return
 
