@@ -697,6 +697,9 @@ async def on_message(message):
             bot.message_sent.add(message.id)
             print("중복 출석 메시지 전송", flush=True)
             
+            # 메시지 전송 전에 processing_messages에서 제거
+            bot.processing_messages.remove(message.id)
+            
             await message.channel.send(
                 f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
                 f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
