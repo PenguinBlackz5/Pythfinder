@@ -646,18 +646,14 @@ class AttendanceBot(commands.Bot):
             # 5초 이내의 중복 메시지인지 확인
             if self.is_duplicate_message(user_id, today):
                 print("5초 이내 중복 메시지. 무시", flush=True)
-                msg = await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.", ephemeral=True)
-                await asyncio.sleep(3)
-                await msg.delete()
+                msg = await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.", delete_after=3)
                 self.mark_message_as_processed(message.id)
                 return
 
             # 이미 출석했는지 확인
             if cache_key in self.attendance_cache:
                 print("이미 출석한 사용자. 무시", flush=True)
-                msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", ephemeral=True)
-                await asyncio.sleep(3)
-                await msg.delete()
+                msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", delete_after=3)
                 self.mark_message_as_processed(message.id)
                 return
 
@@ -742,7 +738,7 @@ class AttendanceBot(commands.Bot):
             
         except Exception as e:
             print(f"출석 처리 중 오류 발생: {e}", flush=True)
-            await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+            await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", delete_after=3)
             
         finally:
             if conn:
