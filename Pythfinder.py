@@ -594,9 +594,14 @@ class AttendanceBot(commands.Bot):
             await self.process_commands(message)
             return
             
-        print(f"채널: {message.channel.name}", flush=True)
-        print(f"채널 ID: {message.channel.id}", flush=True)
-        print(f"등록된 출석 채널: {self.attendance_channels}", flush=True)
+        # 채널 정보 출력 (DM이 아닌 경우에만)
+        try:
+            print(f"채널: {message.channel.name}", flush=True)
+            print(f"채널 ID: {message.channel.id}", flush=True)
+            print(f"등록된 출석 채널: {self.attendance_channels}", flush=True)
+        except AttributeError:
+            print("채널 정보를 가져올 수 없습니다.", flush=True)
+            
         print("="*50 + "\n", flush=True)
 
         # 봇 메시지 무시
@@ -762,13 +767,13 @@ async def set_attendance_channel(interaction: discord.Interaction):
 
 @bot.tree.command(name="출석정보", description="자신의 출석 현황을 확인합니다.")
 async def check_attendance(interaction: discord.Interaction):
-    # 먼저 응답 대기 상태를 알림
-    await interaction.response.defer(ephemeral=True)
-    
-    user_id = interaction.user.id
-    today = datetime.now(KST).strftime('%Y-%m-%d')
-    
     try:
+        # 먼저 응답 대기 상태를 알림
+        await interaction.response.defer(ephemeral=True)
+        
+        user_id = interaction.user.id
+        today = datetime.now(KST).strftime('%Y-%m-%d')
+        
         conn = get_db_connection()
         if not conn:
             await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
@@ -815,9 +820,14 @@ async def check_attendance(interaction: discord.Interaction):
                 ephemeral=True
             )
     
+    except discord.NotFound:
+        print("상호작용이 만료되었습니다.", flush=True)
     except Exception as e:
-        print(f"출석정보 확인 중 오류 발생: {e}")
-        await interaction.followup.send("오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+        print(f"출석정보 확인 중 오류 발생: {e}", flush=True)
+        try:
+            await interaction.followup.send("오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+        except discord.NotFound:
+            print("상호작용이 만료되어 응답을 보낼 수 없습니다.", flush=True)
     
     finally:
         if conn:
