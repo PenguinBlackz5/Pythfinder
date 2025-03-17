@@ -628,16 +628,6 @@ async def check_balance(interaction: discord.Interaction):
 
 @bot.event
 async def on_message(message):
-    # 봇 메시지 무시 (자신의 메시지도 무시)
-    if message.author.bot or message.author.id == bot.user.id:
-        print("봇 메시지 무시", flush=True)
-        return
-        
-    # 출석 채널이 아니면 무시
-    if message.channel.id not in bot.attendance_channels:
-        print("출석 채널이 아님. 무시", flush=True)
-        return
-        
     # 이미 처리 중인 메시지인 경우 무시
     if message.id in bot.processing_messages:
         print("이미 처리 중인 메시지입니다. 무시합니다.", flush=True)
@@ -646,6 +636,16 @@ async def on_message(message):
     # 이미 메시지를 전송한 경우 무시
     if message.id in bot.message_sent:
         print("이미 전송된 메시지입니다. 무시합니다.", flush=True)
+        return
+        
+    # 봇 메시지 무시 (자신의 메시지도 무시)
+    if message.author.bot or message.author.id == bot.user.id:
+        print("봇 메시지 무시", flush=True)
+        return
+        
+    # 출석 채널이 아니면 무시
+    if message.channel.id not in bot.attendance_channels:
+        print("출석 채널이 아님. 무시", flush=True)
         return
         
     print("\n" + "="*50, flush=True)
