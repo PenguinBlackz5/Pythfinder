@@ -639,43 +639,43 @@ async def check_balance(interaction: discord.Interaction):
 
 @bot.event
 async def on_message(message):
-    print("\n" + "="*50)
-    print("메시지 이벤트 발생!")
-    print(f"메시지 ID: {message.id}")
-    print(f"작성자: {message.author.name}")
-    print(f"채널: {message.channel.name}")
-    print("="*50 + "\n")
+    print("\n" + "="*50, flush=True)
+    print("메시지 이벤트 발생!", flush=True)
+    print(f"메시지 ID: {message.id}", flush=True)
+    print(f"작성자: {message.author.name}", flush=True)
+    print(f"채널: {message.channel.name}", flush=True)
+    print("="*50 + "\n", flush=True)
     
     # 봇 메시지 무시
     if message.author.bot:
-        print("봇 메시지 무시")
+        print("봇 메시지 무시", flush=True)
         return
         
     # 출석 채널이 아니면 무시
     if message.channel.id not in bot.attendance_channels:
-        print("출석 채널이 아님. 무시")
+        print("출석 채널이 아님. 무시", flush=True)
         return
         
-    print(f"\n=== 메시지 처리 시작 ===")
-    print(f"메시지 ID: {message.id}")
-    print(f"작성자: {message.author.name}")
-    print(f"채널: {message.channel.name}")
-    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}")
-    print(f"전송된 메시지 수: {len(bot.message_sent)}")
+    print(f"\n=== 메시지 처리 시작 ===", flush=True)
+    print(f"메시지 ID: {message.id}", flush=True)
+    print(f"작성자: {message.author.name}", flush=True)
+    print(f"채널: {message.channel.name}", flush=True)
+    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}", flush=True)
+    print(f"전송된 메시지 수: {len(bot.message_sent)}", flush=True)
     
     # 이미 처리 중인 메시지인 경우 무시
     if message.id in bot.processing_messages:
-        print("이미 처리 중인 메시지입니다. 무시합니다.")
+        print("이미 처리 중인 메시지입니다. 무시합니다.", flush=True)
         return
         
     # 이미 메시지를 전송한 경우 무시
     if message.id in bot.message_sent:
-        print("이미 전송된 메시지입니다. 무시합니다.")
+        print("이미 전송된 메시지입니다. 무시합니다.", flush=True)
         return
         
     # 메시지 ID를 처리 중인 메시지 집합에 추가
     bot.processing_messages.add(message.id)
-    print("메시지 처리 시작")
+    print("메시지 처리 시작", flush=True)
     
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
@@ -691,13 +691,13 @@ async def on_message(message):
         
         # 5초 이내에 같은 사용자의 메시지가 있다면 무시
         if time_diff < 5:
-            print("5초 이내의 중복 메시지입니다. 무시합니다.")
+            print("5초 이내의 중복 메시지입니다. 무시합니다.", flush=True)
             bot.processing_messages.remove(message.id)
             return
     
     # 캐시에서 오늘 출석 여부 확인
     if cache_key in bot.attendance_cache:
-        print("캐시에서 출석 정보 확인됨")
+        print("캐시에서 출석 정보 확인됨", flush=True)
         tomorrow = datetime.now(KST) + timedelta(days=1)
         tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
         current_time = datetime.now(KST)
@@ -708,7 +708,7 @@ async def on_message(message):
         
         # 메시지 전송 전에 ID를 저장
         bot.message_sent.add(message.id)
-        print("중복 출석 메시지 전송")
+        print("중복 출석 메시지 전송", flush=True)
         
         await message.channel.send(
             f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
@@ -716,12 +716,12 @@ async def on_message(message):
             delete_after=3
         )
         bot.processing_messages.remove(message.id)
-        print("=== 메시지 처리 완료 ===\n")
+        print("=== 메시지 처리 완료 ===\n", flush=True)
         return
     
     conn = get_db_connection()
     if not conn:
-        print("데이터베이스 연결 실패")
+        print("데이터베이스 연결 실패", flush=True)
         bot.processing_messages.remove(message.id)
         return
 
@@ -739,7 +739,7 @@ async def on_message(message):
             
             # 이미 오늘 출석했는지 확인
             if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
-                print("데이터베이스에서 중복 출석 확인됨")
+                print("데이터베이스에서 중복 출석 확인됨", flush=True)
                 # 캐시에 출석 정보 저장
                 bot.attendance_cache[cache_key] = True
                 bot.message_history[cache_key] = datetime.now(KST)
@@ -754,7 +754,7 @@ async def on_message(message):
                 
                 # 메시지 전송 전에 ID를 저장
                 bot.message_sent.add(message.id)
-                print("중복 출석 메시지 전송")
+                print("중복 출석 메시지 전송", flush=True)
                 
                 await message.channel.send(
                     f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
@@ -799,7 +799,7 @@ async def on_message(message):
         
         # 메시지 전송 전에 ID를 저장
         bot.message_sent.add(message.id)
-        print("출석 성공 메시지 전송")
+        print("출석 성공 메시지 전송", flush=True)
         
         # 출석 메시지 전송 (한 번만)
         sent_message = await message.channel.send(
@@ -810,15 +810,15 @@ async def on_message(message):
         )
         
     except Exception as e:
-        print(f"출석 처리 중 오류 발생: {e}")
-        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.")
+        print(f"출석 처리 중 오류 발생: {e}", flush=True)
+        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
         
     finally:
         if conn:
             conn.close()
         # 처리 중인 메시지 집합에서 제거
         bot.processing_messages.remove(message.id)
-        print("=== 메시지 처리 완료 ===\n")
+        print("=== 메시지 처리 완료 ===\n", flush=True)
 
     # 기존 명령어 처리를 위한 이벤트 추가
     await bot.process_commands(message)
@@ -855,7 +855,7 @@ async def test_db(interaction: discord.Interaction):
         await interaction.response.send_message("이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!", ephemeral=True)
         return
     
-    print(f"디비테스트 명령어 실행 - 요청자: {interaction.user.name}")
+    print(f"디비테스트 명령어 실행 - 요청자: {interaction.user.name}", flush=True)
     
     conn = get_db_connection()
     if not conn:
@@ -900,7 +900,7 @@ async def test_db(interaction: discord.Interaction):
         await interaction.response.send_message(status_message, ephemeral=True)
         
     except Exception as e:
-        print(f"디비테스트 실행 중 오류: {e}")  # 디버깅 로그 추가
+        print(f"디비테스트 실행 중 오류: {e}", flush=True)  # 디버깅 로그 추가
         await interaction.response.send_message(
             f"❌ 데이터베이스 쿼리 실행 중 오류 발생:\n{str(e)}", 
             ephemeral=True
@@ -928,7 +928,7 @@ async def clear_all_cache(interaction: discord.Interaction):
         
         # 실제 멤버 수 계산 (봇 제외)
         member_count = sum(1 for member in guild.members if not member.bot)
-        print(f"서버 '{guild.name}'의 멤버 수: {member_count}")  # 디버깅용
+        print(f"서버 '{guild.name}'의 멤버 수: {member_count}", flush=True)  # 디버깅용
         
         if member_count == 0:
             await interaction.response.send_message(
@@ -953,7 +953,7 @@ async def clear_all_cache(interaction: discord.Interaction):
             ephemeral=True
         )
     except Exception as e:
-        print(f"멤버 목록 가져오기 실패: {e}")
+        print(f"멤버 목록 가져오기 실패: {e}", flush=True)
         await interaction.response.send_message(
             "멤버 목록을 가져오는 중 오류가 발생했습니다.",
             ephemeral=True
@@ -1062,7 +1062,7 @@ async def check_db_structure(interaction: discord.Interaction):
         await interaction.followup.send(message, ephemeral=True)
         
     except Exception as e:
-        print(f"데이터베이스 구조 조회 중 오류 발생: {e}")
+        print(f"데이터베이스 구조 조회 중 오류 발생: {e}", flush=True)
         await interaction.followup.send(
             f"❌ 데이터베이스 조회 중 오류가 발생했습니다.\n```{str(e)}```", 
             ephemeral=True
@@ -1163,7 +1163,7 @@ async def check_server_attendance(interaction: discord.Interaction):
             await interaction.followup.send(message, ephemeral=True)
             
     except Exception as e:
-        print(f"출석 현황 조회 중 오류 발생: {e}")
+        print(f"출석 현황 조회 중 오류 발생: {e}", flush=True)
         await interaction.followup.send(
             f"❌ 출석 현황 조회 중 오류가 발생했습니다.\n```{str(e)}```", 
             ephemeral=True
@@ -1190,9 +1190,9 @@ def keep_alive():
             # Render에서 제공하는 URL 환경변수 사용
             url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:8080')
             response = requests.get(url)
-            print(f"서버 핑 전송 완료: {response.status_code}")
+            print(f"서버 핑 전송 완료: {response.status_code}", flush=True)
         except Exception as e:
-            print(f"서버 핑 전송 실패: {e}")
+            print(f"서버 핑 전송 실패: {e}", flush=True)
         time.sleep(840)  # 14분(840초)마다 실행 (15분보다 약간 짧게 설정)
 
 # 봇 실행 부분 수정
