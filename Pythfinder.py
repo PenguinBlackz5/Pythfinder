@@ -760,34 +760,44 @@ async def set_attendance_channel(interaction: discord.Interaction):
     print(f"채널 ID: {channel_id}", flush=True)
     print(f"현재 등록된 출석 채널: {bot.attendance_channels}", flush=True)
     
+    # 먼저 응답 대기 상태로 전환
+    await interaction.response.defer(ephemeral=True)
+    
     conn = get_db_connection()
     if not conn:
         print("데이터베이스 연결 실패", flush=True)
-        await interaction.response.send_message("데이터베이스 연결 실패!", ephemeral=True)
+        await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
         return
 
     try:
         c = conn.cursor()
         
-        # 먼저 데이터베이스에서 채널이 이미 존재하는지 확인
-        c.execute('SELECT channel_id FROM channels WHERE channel_id = %s', (channel_id,))
-        if c.fetchone():
-            print(f"이미 등록된 채널: {channel_id}", flush=True)
-            await interaction.response.send_message(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
-            return
-            
-        # 채널 등록
+        # 현재 서버의 모든 채널 ID 가져오기
+        guild_channels = [channel.id for channel in interaction.guild.channels]
+        
+        # 현재 서버의 기존 출석 채널 삭제
+        c.execute('DELETE FROM channels WHERE channel_id = ANY(%s)', (guild_channels,))
+        deleted_count = c.rowcount
+        print(f"삭제된 기존 출석 채널 수: {deleted_count}", flush=True)
+        
+        # 새로운 채널 등록
         c.execute('INSERT INTO channels (channel_id) VALUES (%s)', (channel_id,))
         conn.commit()
-        bot.attendance_channels.add(channel_id)
-        print(f"채널 등록 성공: {channel_id}", flush=True)
+        
+        # 메모리 캐시 업데이트
+        bot.attendance_channels = set(channel[0] for channel in c.execute('SELECT channel_id FROM channels'))
         print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)
-        await interaction.response.send_message(f"이 채널이 출석 채널로 지정되었습니다!", ephemeral=True)
+        
+        await interaction.followup.send(
+            f"✅ 이 채널이 출석 채널로 지정되었습니다!\n"
+            f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
+            ephemeral=True
+        )
         
     except Exception as e:
         print(f"채널 등록 중 오류 발생: {e}", flush=True)
         try:
-            await interaction.response.send_message("채널 등록 중 오류가 발생했습니다.", ephemeral=True)
+            await interaction.followup.send("채널 등록 중 오류가 발생했습니다.", ephemeral=True)
         except discord.NotFound:
             print("상호작용이 만료되었습니다.", flush=True)
     finally:
