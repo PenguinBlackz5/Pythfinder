@@ -416,6 +416,7 @@ class AttendanceBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents)
         
         print("봇 인스턴스 생성 완료")
+        self._db_initialized = False  # 데이터베이스 초기화 상태 추적
         self.init_database()
         self.attendance_channels = set()
         self.load_attendance_channels()
@@ -435,46 +436,47 @@ class AttendanceBot(commands.Bot):
         print("=== 이벤트 핸들러 등록 완료 ===\n")
 
     def init_database(self):
+        if self._db_initialized:
+            print("데이터베이스가 이미 초기화되어 있습니다.")
+            return
+            
+        print("\n=== 데이터베이스 초기화 시작 ===")
         conn = get_db_connection()
         if not conn:
-            print("데이터베이스 초기화 실패")
+            print("데이터베이스 연결 실패")
             return
-
+            
         try:
             cur = conn.cursor()
-            
-            # 테이블 존재 여부 확인
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'attendance'
-                )
-            """)
-            table_exists = cur.fetchone()[0]
-            print(f"attendance 테이블 존재 여부: {table_exists}")  # 테이블 존재 여부 로그
+            print("데이터베이스 연결 성공")
             
             # 테이블 생성
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS attendance (
                     user_id BIGINT PRIMARY KEY,
-                    last_attendance DATE,
+                    last_attendance TIMESTAMP,
                     streak INTEGER DEFAULT 0,
                     money INTEGER DEFAULT 0
                 )
             ''')
+            print("attendance 테이블 확인/생성 완료")
             
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS channels (
                     channel_id BIGINT PRIMARY KEY
                 )
             ''')
+            print("channels 테이블 확인/생성 완료")
             
             conn.commit()
-            print("테이블 생성/확인 완료!")  # 테이블 생성 완료 로그
+            self._db_initialized = True
+            print("=== 데이터베이스 초기화 완료 ===\n")
+            
         except Error as e:
-            print(f"테이블 생성 오류: {e}")
+            print(f"데이터베이스 초기화 중 오류 발생: {e}")
         finally:
-            conn.close()
+            if conn:
+                conn.close()
     
     def load_attendance_channels(self):
         conn = get_db_connection()
