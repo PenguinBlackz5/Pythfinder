@@ -665,91 +665,45 @@ async def on_message(message):
         return
         
     # 5. 메시지 처리 시작
-    bot.processing_messages.add(message.id)
-    
-    print("\n" + "="*50, flush=True)
-    print("메시지 이벤트 발생!", flush=True)
-    print(f"메시지 ID: {message.id}", flush=True)
-    print(f"작성자: {message.author.name}", flush=True)
-    print(f"채널: {message.channel.name}", flush=True)
-    print("="*50 + "\n", flush=True)
-    
-    print(f"\n=== 메시지 처리 시작 ===", flush=True)
-    print(f"메시지 ID: {message.id}", flush=True)
-    print(f"작성자: {message.author.name}", flush=True)
-    print(f"채널: {message.channel.name}", flush=True)
-    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}", flush=True)
-    print(f"전송된 메시지 수: {len(bot.message_sent)}", flush=True)
-    print("메시지 처리 시작", flush=True)
-    
-    conn = None
     try:
-        user_id = message.author.id
-        today = datetime.now(KST).strftime('%Y-%m-%d')
-        cache_key = f"{user_id}_{today}"
+        bot.processing_messages.add(message.id)
         
-        # 6. 메시지 히스토리 확인 (5초 이내 중복 방지)
-        if cache_key in bot.message_history:
-            last_message_time = bot.message_history[cache_key]
-            current_time = datetime.now(KST)
-            time_diff = (current_time - last_message_time).total_seconds()
-            
-            print(f"마지막 메시지로부터 {time_diff}초 경과", flush=True)
-            
-            if time_diff < 5:
-                print("5초 이내의 중복 메시지입니다. 무시합니다.", flush=True)
-                bot.processing_messages.remove(message.id)
-                return
+        print("\n" + "="*50, flush=True)
+        print("메시지 이벤트 발생!", flush=True)
+        print(f"메시지 ID: {message.id}", flush=True)
+        print(f"작성자: {message.author.name}", flush=True)
+        print(f"채널: {message.channel.name}", flush=True)
+        print("="*50 + "\n", flush=True)
         
-        # 7. 캐시에서 출석 여부 확인
-        if cache_key in bot.attendance_cache:
-            print("캐시에서 출석 정보 확인됨", flush=True)
-            tomorrow = datetime.now(KST) + timedelta(days=1)
-            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-            current_time = datetime.now(KST)
-            time_until_next = tomorrow - current_time
-            
-            hours = int(time_until_next.total_seconds() // 3600)
-            minutes = int((time_until_next.total_seconds() % 3600) // 60)
-            
-            # 메시지 전송 전에 ID를 저장
-            bot.message_sent.add(message.id)
-            print("중복 출석 메시지 전송", flush=True)
-            
-            # 메시지 전송 전에 processing_messages에서 제거
-            bot.processing_messages.remove(message.id)
-            
-            await message.channel.send(
-                f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
-                f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
-                delete_after=3
-            )
-            return
+        print(f"\n=== 메시지 처리 시작 ===", flush=True)
+        print(f"메시지 ID: {message.id}", flush=True)
+        print(f"작성자: {message.author.name}", flush=True)
+        print(f"채널: {message.channel.name}", flush=True)
+        print(f"처리 중인 메시지 수: {len(bot.processing_messages)}", flush=True)
+        print(f"전송된 메시지 수: {len(bot.message_sent)}", flush=True)
+        print("메시지 처리 시작", flush=True)
         
-        # 8. 데이터베이스 연결 및 처리
-        conn = get_db_connection()
-        if not conn:
-            print("데이터베이스 연결 실패", flush=True)
-            return
-
-        cur = conn.cursor()
-        
-        # 현재 사용자 정보 확인
-        cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
-        result = cur.fetchone()
-        
-        if result:
-            last_attendance = result[0]
-            current_streak = result[1]
-            current_money = result[2]
+        conn = None
+        try:
+            user_id = message.author.id
+            today = datetime.now(KST).strftime('%Y-%m-%d')
+            cache_key = f"{user_id}_{today}"
             
-            # 이미 오늘 출석했는지 확인
-            if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
-                print("데이터베이스에서 중복 출석 확인됨", flush=True)
-                # 캐시에 출석 정보 저장
-                bot.attendance_cache[cache_key] = True
-                bot.message_history[cache_key] = datetime.now(KST)
+            # 6. 메시지 히스토리 확인 (5초 이내 중복 방지)
+            if cache_key in bot.message_history:
+                last_message_time = bot.message_history[cache_key]
+                current_time = datetime.now(KST)
+                time_diff = (current_time - last_message_time).total_seconds()
                 
+                print(f"마지막 메시지로부터 {time_diff}초 경과", flush=True)
+                
+                if time_diff < 5:
+                    print("5초 이내의 중복 메시지입니다. 무시합니다.", flush=True)
+                    return
+            
+            # 7. 캐시에서 출석 여부 확인
+            if cache_key in bot.attendance_cache:
+                print("캐시에서 출석 정보 확인됨", flush=True)
                 tomorrow = datetime.now(KST) + timedelta(days=1)
                 tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
                 current_time = datetime.now(KST)
@@ -768,63 +722,109 @@ async def on_message(message):
                     delete_after=3
                 )
                 return
-                
-            # 연속 출석 확인
-            yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
-            if last_attendance and last_attendance.strftime('%Y-%m-%d') == yesterday:
-                streak = current_streak + 1
-            else:
-                streak = 1
-        else:
-            # 새로운 사용자
-            current_money = 0
-            streak = 1
             
-        # 출석 순서 확인
-        cur.execute('''
-            SELECT COUNT(*) FROM attendance 
-            WHERE DATE(last_attendance) = %s AND user_id != %s
-        ''', (today, user_id))
-        attendance_order = cur.fetchone()[0] + 1
-        
-        # 출석 정보 업데이트
-        cur.execute('''
-            INSERT INTO attendance (user_id, last_attendance, streak, money)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE 
-            SET last_attendance = %s, 
-                streak = %s, 
-                money = attendance.money + 10
-        ''', (user_id, today, streak, current_money + 10, today, streak))
-        
-        conn.commit()
-        
-        # 캐시에 출석 정보 저장
-        bot.attendance_cache[cache_key] = True
-        bot.message_history[cache_key] = datetime.now(KST)
-        
-        # 메시지 전송 전에 ID를 저장
-        bot.message_sent.add(message.id)
-        print("출석 성공 메시지 전송", flush=True)
-        
-        # 출석 메시지 전송 (한 번만)
-        await message.channel.send(
-            f"🎉 {message.author.mention}님 출석하셨습니다!\n"
-            f"오늘 {attendance_order}번째 출석이에요.\n"
-            f"현재 {streak}일 연속 출석 중입니다!\n"
-            f"💰 출석 보상 10원이 지급되었습니다."
-        )
-        
-    except Exception as e:
-        print(f"출석 처리 중 오류 발생: {e}", flush=True)
-        await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
-        
+            # 8. 데이터베이스 연결 및 처리
+            conn = get_db_connection()
+            if not conn:
+                print("데이터베이스 연결 실패", flush=True)
+                return
+
+            cur = conn.cursor()
+            
+            # 현재 사용자 정보 확인
+            cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
+            result = cur.fetchone()
+            
+            if result:
+                last_attendance = result[0]
+                current_streak = result[1]
+                current_money = result[2]
+                
+                # 이미 오늘 출석했는지 확인
+                if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
+                    print("데이터베이스에서 중복 출석 확인됨", flush=True)
+                    # 캐시에 출석 정보 저장
+                    bot.attendance_cache[cache_key] = True
+                    bot.message_history[cache_key] = datetime.now(KST)
+                    
+                    tomorrow = datetime.now(KST) + timedelta(days=1)
+                    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+                    current_time = datetime.now(KST)
+                    time_until_next = tomorrow - current_time
+                    
+                    hours = int(time_until_next.total_seconds() // 3600)
+                    minutes = int((time_until_next.total_seconds() % 3600) // 60)
+                    
+                    # 메시지 전송 전에 ID를 저장
+                    bot.message_sent.add(message.id)
+                    print("중복 출석 메시지 전송", flush=True)
+                    
+                    await message.channel.send(
+                        f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
+                        f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
+                        delete_after=3
+                    )
+                    return
+                    
+                # 연속 출석 확인
+                yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
+                if last_attendance and last_attendance.strftime('%Y-%m-%d') == yesterday:
+                    streak = current_streak + 1
+                else:
+                    streak = 1
+            else:
+                # 새로운 사용자
+                current_money = 0
+                streak = 1
+                
+            # 출석 순서 확인
+            cur.execute('''
+                SELECT COUNT(*) FROM attendance 
+                WHERE DATE(last_attendance) = %s AND user_id != %s
+            ''', (today, user_id))
+            attendance_order = cur.fetchone()[0] + 1
+            
+            # 출석 정보 업데이트
+            cur.execute('''
+                INSERT INTO attendance (user_id, last_attendance, streak, money)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE 
+                SET last_attendance = %s, 
+                    streak = %s, 
+                    money = attendance.money + 10
+            ''', (user_id, today, streak, current_money + 10, today, streak))
+            
+            conn.commit()
+            
+            # 캐시에 출석 정보 저장
+            bot.attendance_cache[cache_key] = True
+            bot.message_history[cache_key] = datetime.now(KST)
+            
+            # 메시지 전송 전에 ID를 저장
+            bot.message_sent.add(message.id)
+            print("출석 성공 메시지 전송", flush=True)
+            
+            # 출석 메시지 전송 (한 번만)
+            await message.channel.send(
+                f"🎉 {message.author.mention}님 출석하셨습니다!\n"
+                f"오늘 {attendance_order}번째 출석이에요.\n"
+                f"현재 {streak}일 연속 출석 중입니다!\n"
+                f"💰 출석 보상 10원이 지급되었습니다."
+            )
+            
+        except Exception as e:
+            print(f"출석 처리 중 오류 발생: {e}", flush=True)
+            await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+            
+        finally:
+            if conn:
+                conn.close()
+            print("=== 메시지 처리 완료 ===\n", flush=True)
+            
     finally:
-        if conn:
-            conn.close()
-        # 처리 중인 메시지 집합에서 제거
-        bot.processing_messages.remove(message.id)
-        print("=== 메시지 처리 완료 ===\n", flush=True)
+        # 처리 중인 메시지 집합에서 제거 (KeyError 방지)
+        if message.id in bot.processing_messages:
+            bot.processing_messages.remove(message.id)
 
 @bot.tree.command(name="출석초기화", description="연속 출석 일수를 초기화합니다. (보유 금액은 유지)")
 async def reset_attendance(interaction: discord.Interaction):
