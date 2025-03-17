@@ -587,6 +587,13 @@ class AttendanceBot(commands.Bot):
         print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
         print(f"메시지 ID: {message.id}", flush=True)
         print(f"작성자: {message.author.name}", flush=True)
+        
+        # DM 채널인 경우 처리
+        if isinstance(message.channel, discord.DMChannel):
+            print("DM 채널 메시지", flush=True)
+            await self.process_commands(message)
+            return
+            
         print(f"채널: {message.channel.name}", flush=True)
         print(f"채널 ID: {message.channel.id}", flush=True)
         print(f"등록된 출석 채널: {self.attendance_channels}", flush=True)
@@ -780,7 +787,8 @@ async def check_attendance(interaction: discord.Interaction):
             
             # 다음 출석까지 남은 시간 계산
             now = datetime.now(KST)
-            next_attendance = (last_attendance + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            next_attendance = last_attendance + timedelta(days=1)
+            next_attendance = next_attendance.replace(hour=0, minute=0, second=0, microsecond=0)
             time_left = next_attendance - now
             
             if time_left.total_seconds() <= 0:
