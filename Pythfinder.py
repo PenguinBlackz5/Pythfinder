@@ -439,6 +439,16 @@ class AttendanceBot(commands.Bot):
             print(f"슬래시 명령어 동기화 중 오류 발생: {e}")
         print("=== 이벤트 핸들러 등록 완료 ===\n")
 
+    async def on_ready(self):
+        print("\n" + "="*50)
+        print("봇이 준비되었습니다!")
+        print(f"봇 이름: {self.user}")
+        print(f"봇 ID: {self.user.id}")
+        print(f"서버 수: {len(self.guilds)}")
+        print(f"캐시된 메시지 수: {len(self.message_sent)}")
+        print(f"처리 중인 메시지 수: {len(self.processing_messages)}")
+        print("="*50 + "\n")
+
     def init_database(self):
         if self._db_initialized:
             print("데이터베이스가 이미 초기화되어 있습니다.")
@@ -499,28 +509,6 @@ class AttendanceBot(commands.Bot):
             conn.close()
 
 bot = AttendanceBot()
-
-@bot.event
-async def on_ready():
-    print("\n" + "="*50)
-    print("봇이 준비되었습니다!")
-    print(f"봇 이름: {bot.user}")
-    print(f"봇 ID: {bot.user.id}")
-    print(f"서버 수: {len(bot.guilds)}")
-    print(f"캐시된 메시지 수: {len(bot.message_sent)}")
-    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}")
-    print("="*50 + "\n")
-    
-    # 봇이 시작될 때 명령어 동기화 상태 확인
-    try:
-        print("슬래시 명령어 동기화 시작...")
-        synced = await bot.tree.sync()
-        print(f'명령어 동기화 완료! {len(synced)}개의 명령어가 동기화되었습니다.')
-        # 동기화된 명령어 목록 출력
-        for cmd in synced:
-            print(f"- {cmd.name}")
-    except Exception as e:
-        print(f'명령어 동기화 중 오류 발생: {e}')
 
 @bot.tree.command(name="출석채널", description="출석을 인식할 채널을 지정합니다.")
 @app_commands.default_permissions(administrator=True)
