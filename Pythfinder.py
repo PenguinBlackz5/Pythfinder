@@ -633,17 +633,20 @@ async def on_message(message):
         print("봇 메시지 무시", flush=True)
         return
         
-    # 2. 출석 채널 체크
+    # 2. 명령어 처리 먼저 시도
+    await bot.process_commands(message)
+    
+    # 3. 출석 채널 체크
     if message.channel.id not in bot.attendance_channels:
         print("출석 채널이 아님. 무시", flush=True)
         return
         
-    # 3. 메시지 ID 기반 중복 체크 (처리 중이거나 이미 전송된 메시지)
+    # 4. 메시지 ID 기반 중복 체크 (처리 중이거나 이미 전송된 메시지)
     if message.id in bot.processing_messages or message.id in bot.message_sent:
         print(f"이미 처리된 메시지입니다. ID: {message.id}", flush=True)
         return
         
-    # 4. 메시지 처리 시작
+    # 5. 메시지 처리 시작
     bot.processing_messages.add(message.id)
     
     print("\n" + "="*50, flush=True)
@@ -800,9 +803,6 @@ async def on_message(message):
         # 처리 중인 메시지 집합에서 제거
         bot.processing_messages.remove(message.id)
         print("=== 메시지 처리 완료 ===\n", flush=True)
-
-    # 기존 명령어 처리를 위한 이벤트 추가
-    await bot.process_commands(message)
 
 @bot.tree.command(name="출석초기화", description="연속 출석 일수를 초기화합니다. (보유 금액은 유지)")
 async def reset_attendance(interaction: discord.Interaction):
