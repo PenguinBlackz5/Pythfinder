@@ -418,6 +418,7 @@ class AttendanceBot(commands.Bot):
         self.init_database()
         self.attendance_channels = set()
         self.load_attendance_channels()
+        self.processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합 추가
 
     async def setup_hook(self):
         # 슬래시 명령어 동기화
@@ -618,11 +619,19 @@ async def on_message(message):
     if message.channel.id not in bot.attendance_channels:
         return
         
+    # 이미 처리 중인 메시지인 경우 무시
+    if message.id in bot.processing_messages:
+        return
+        
+    # 메시지 ID를 처리 중인 메시지 집합에 추가
+    bot.processing_messages.add(message.id)
+    
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
     
     conn = get_db_connection()
     if not conn:
+        bot.processing_messages.remove(message.id)  # 처리 중인 메시지 집합에서 제거
         return
 
     try:
@@ -699,6 +708,8 @@ async def on_message(message):
     finally:
         if conn:
             conn.close()
+        # 처리 중인 메시지 집합에서 제거
+        bot.processing_messages.remove(message.id)
 
     # 기존 명령어 처리를 위한 이벤트 추가
     await bot.process_commands(message)
