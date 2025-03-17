@@ -666,6 +666,7 @@ async def on_message(message):
     bot.processing_messages.add(message.id)
     print("메시지 처리 시작", flush=True)
     
+    conn = None
     try:
         user_id = message.author.id
         today = datetime.now(KST).strftime('%Y-%m-%d')
@@ -787,7 +788,7 @@ async def on_message(message):
         print("출석 성공 메시지 전송", flush=True)
         
         # 출석 메시지 전송 (한 번만)
-        sent_message = await message.channel.send(
+        await message.channel.send(
             f"🎉 {message.author.mention}님 출석하셨습니다!\n"
             f"오늘 {attendance_order}번째 출석이에요.\n"
             f"현재 {streak}일 연속 출석 중입니다!\n"
