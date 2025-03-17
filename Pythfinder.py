@@ -588,9 +588,9 @@ class AttendanceBot(commands.Bot):
         print(f"메시지 ID: {message.id}", flush=True)
         print(f"작성자: {message.author.name}", flush=True)
         
-        # DM 채널인 경우 처리
+        # DM 채널인 경우 명령어만 처리하고 종료
         if isinstance(message.channel, discord.DMChannel):
-            print("DM 채널 메시지", flush=True)
+            print("DM 채널 메시지 - 명령어만 처리", flush=True)
             await self.process_commands(message)
             return
             
@@ -794,6 +794,7 @@ async def check_attendance(interaction: discord.Interaction):
             # 다음 출석까지 남은 시간 계산
             now = datetime.now(KST)
             next_attendance = last_attendance + timedelta(days=1)
+            # replace() 함수 호출 수정
             next_attendance = next_attendance.replace(hour=0, minute=0, second=0)
             time_left = next_attendance - now
             
