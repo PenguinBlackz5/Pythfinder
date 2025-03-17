@@ -452,17 +452,6 @@ class AttendanceBot(commands.Bot):
         print(f"캐시된 메시지 수: {len(self.message_sent)}", flush=True)
         print(f"처리 중인 메시지 수: {len(self.processing_messages)}", flush=True)
         print("="*50 + "\n", flush=True)
-        
-        # 봇이 시작될 때 명령어 동기화 상태 확인
-        try:
-            print("슬래시 명령어 동기화 시작...", flush=True)
-            synced = await self.tree.sync()
-            print(f'명령어 동기화 완료! {len(synced)}개의 명령어가 동기화되었습니다.', flush=True)
-            # 동기화된 명령어 목록 출력
-            for cmd in synced:
-                print(f"- {cmd.name}", flush=True)
-        except Exception as e:
-            print(f'명령어 동기화 중 오류 발생: {e}', flush=True)
 
     def init_database(self):
         if self._db_initialized:
