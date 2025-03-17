@@ -767,9 +767,9 @@ async def set_attendance_channel(interaction: discord.Interaction):
 
 @bot.tree.command(name="출석정보", description="자신의 출석 현황을 확인합니다.")
 async def check_attendance(interaction: discord.Interaction):
-    conn = None  # conn 변수를 미리 초기화
+    conn = None
     try:
-        # 먼저 응답 대기 상태를 알림
+        # 즉시 응답 대기 상태로 전환
         await interaction.response.defer(ephemeral=True)
         
         user_id = interaction.user.id
@@ -794,8 +794,7 @@ async def check_attendance(interaction: discord.Interaction):
             # 다음 출석까지 남은 시간 계산
             now = datetime.now(KST)
             next_attendance = last_attendance + timedelta(days=1)
-            # replace() 함수 호출 수정
-            next_attendance = datetime(next_attendance.year, next_attendance.month, next_attendance.day)
+            next_attendance = datetime(next_attendance.year, next_attendance.month, next_attendance.day, tzinfo=KST)
             time_left = next_attendance - now
             
             if time_left.total_seconds() <= 0:
