@@ -795,7 +795,7 @@ async def check_attendance(interaction: discord.Interaction):
             now = datetime.now(KST)
             next_attendance = last_attendance + timedelta(days=1)
             # replace() 함수 호출 수정
-            next_attendance = datetime(next_attendance.year, next_attendance.month, next_attendance.day)
+            next_attendance = next_attendance.replace(hour=0, minute=0, second=0, microsecond=0)
             time_left = next_attendance - now
             
             if time_left.total_seconds() <= 0:
