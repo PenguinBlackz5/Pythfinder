@@ -421,6 +421,7 @@ class AttendanceBot(commands.Bot):
         self.processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합 추가
         self.attendance_cache = {}  # 출석 캐시 추가
         self.message_history = {}  # 메시지 히스토리 추가
+        self.last_processed_message = None  # 마지막으로 처리한 메시지 ID 추가
 
     async def setup_hook(self):
         # 슬래시 명령어 동기화
@@ -625,8 +626,13 @@ async def on_message(message):
     if message.id in bot.processing_messages:
         return
         
+    # 마지막으로 처리한 메시지와 동일한 경우 무시
+    if bot.last_processed_message == message.id:
+        return
+        
     # 메시지 ID를 처리 중인 메시지 집합에 추가
     bot.processing_messages.add(message.id)
+    bot.last_processed_message = message.id
     
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
