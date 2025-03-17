@@ -778,10 +778,23 @@ async def check_attendance(interaction: discord.Interaction):
             
             status = "완료" if last_attendance.strftime('%Y-%m-%d') == today else "미완료"
             
+            # 다음 출석까지 남은 시간 계산
+            now = datetime.now(KST)
+            next_attendance = (last_attendance + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            time_left = next_attendance - now
+            
+            if time_left.total_seconds() <= 0:
+                time_left_str = "지금 출석 가능!"
+            else:
+                hours = int(time_left.total_seconds() // 3600)
+                minutes = int((time_left.total_seconds() % 3600) // 60)
+                time_left_str = f"{hours}시간 {minutes}분"
+            
             await interaction.followup.send(
                 f"📊 출석 현황\n"
                 f"오늘 출석: {status}\n"
-                f"연속 출석: {streak}일",
+                f"연속 출석: {streak}일\n"
+                f"다음 출석까지: {time_left_str}",
                 ephemeral=True
             )
         else:
@@ -789,7 +802,8 @@ async def check_attendance(interaction: discord.Interaction):
             await interaction.followup.send(
                 f"📊 출석 현황\n"
                 f"오늘 출석: 미완료\n"
-                f"연속 출석: 0일",
+                f"연속 출석: 0일\n"
+                f"다음 출석까지: 지금 출석 가능!",
                 ephemeral=True
             )
     
