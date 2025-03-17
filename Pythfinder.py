@@ -648,6 +648,9 @@ async def on_message(message):
         print("출석 채널이 아님. 무시", flush=True)
         return
         
+    # 메시지 ID를 처리 중인 메시지 집합에 추가
+    bot.processing_messages.add(message.id)
+    
     print("\n" + "="*50, flush=True)
     print("메시지 이벤트 발생!", flush=True)
     print(f"메시지 ID: {message.id}", flush=True)
@@ -661,9 +664,6 @@ async def on_message(message):
     print(f"채널: {message.channel.name}", flush=True)
     print(f"처리 중인 메시지 수: {len(bot.processing_messages)}", flush=True)
     print(f"전송된 메시지 수: {len(bot.message_sent)}", flush=True)
-    
-    # 메시지 ID를 처리 중인 메시지 집합에 추가
-    bot.processing_messages.add(message.id)
     print("메시지 처리 시작", flush=True)
     
     conn = None
