@@ -760,6 +760,12 @@ async def set_attendance_channel(interaction: discord.Interaction):
     print(f"채널 ID: {channel_id}", flush=True)
     print(f"현재 등록된 출석 채널: {bot.attendance_channels}", flush=True)
     
+    # 이미 등록된 채널인지 먼저 확인
+    if channel_id in bot.attendance_channels:
+        print(f"이미 등록된 채널: {channel_id}", flush=True)
+        await interaction.response.send_message(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
+        return
+    
     conn = get_db_connection()
     if not conn:
         print("데이터베이스 연결 실패", flush=True)
@@ -776,7 +782,17 @@ async def set_attendance_channel(interaction: discord.Interaction):
         await interaction.response.send_message(f"이 채널이 출석 채널로 지정되었습니다!", ephemeral=True)
     except psycopg2.IntegrityError:
         print(f"이미 등록된 채널: {channel_id}", flush=True)
-        await interaction.response.send_message(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
+        # 이미 응답을 보냈을 수 있으므로 followup 사용
+        try:
+            await interaction.followup.send(f"이미 출석 채널로 지정되어 있습니다!", ephemeral=True)
+        except discord.NotFound:
+            print("상호작용이 만료되었습니다.", flush=True)
+    except Exception as e:
+        print(f"채널 등록 중 오류 발생: {e}", flush=True)
+        try:
+            await interaction.followup.send("채널 등록 중 오류가 발생했습니다.", ephemeral=True)
+        except discord.NotFound:
+            print("상호작용이 만료되었습니다.", flush=True)
     finally:
         conn.close()
     print("=== 출석 채널 설정 완료 ===\n", flush=True)
