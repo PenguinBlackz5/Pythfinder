@@ -409,25 +409,27 @@ class AttendanceBot(commands.Bot):
     def __init__(self):
         print("\n=== 봇 초기화 시작 ===", flush=True)
         sys.stdout.flush()
-        # members 인텐트 추가
+        # 필요한 모든 인텐트 추가
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.members = True  # 멤버 목록 접근 권한 추가
+        intents.members = True
+        intents.guilds = True  # 서버 정보 접근 권한 추가
+        intents.guild_messages = True  # 서버 메시지 접근 권한 추가
         super().__init__(command_prefix='!', intents=intents)
         
         print("봇 인스턴스 생성 완료", flush=True)
         sys.stdout.flush()
-        self._db_initialized = False  # 데이터베이스 초기화 상태 추적
+        self._db_initialized = False
         self.init_database()
         self.attendance_channels = set()
         self.load_attendance_channels()
         
         # 메시지 처리 관련 집합들을 클래스 변수로 초기화
-        self._processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합
-        self._message_sent = set()  # 이미 전송한 메시지 ID를 저장하는 집합
-        self._attendance_cache = {}  # 출석 캐시
-        self._message_history = {}  # 메시지 히스토리
-        self._message_lock = {}  # 메시지 처리 잠금 상태를 저장하는 딕셔너리
+        self._processing_messages = set()
+        self._message_sent = set()
+        self._attendance_cache = {}
+        self._message_history = {}
+        self._message_lock = {}
         
         print("=== 봇 초기화 완료 ===\n", flush=True)
         sys.stdout.flush()
@@ -749,10 +751,16 @@ bot = AttendanceBot()
 
 @bot.tree.command(name="출석채널", description="출석을 인식할 채널을 지정합니다.")
 @app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()  # 서버에서만 사용 가능하도록 설정
 async def set_attendance_channel(interaction: discord.Interaction):
     # 관리자 또는 개발자 권한 확인
     if not is_admin_or_developer(interaction):
         await interaction.response.send_message("이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!", ephemeral=True)
+        return
+        
+    # DM 채널에서 실행 방지
+    if isinstance(interaction.channel, discord.DMChannel):
+        await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
         return
         
     channel_id = interaction.channel_id
