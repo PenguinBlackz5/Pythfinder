@@ -643,17 +643,17 @@ class AttendanceBot(commands.Bot):
             today = datetime.now(KST).strftime('%Y-%m-%d')
             cache_key = f"{user_id}_{today}"
 
+            # 이미 출석했는지 먼저 확인
+            if cache_key in self.attendance_cache:
+                print("이미 출석한 사용자. 무시", flush=True)
+                msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", delete_after=3)
+                self.mark_message_as_processed(message.id)
+                return
+
             # 5초 이내의 중복 메시지인지 확인
             if self.is_duplicate_message(user_id, today):
                 print("5초 이내 중복 메시지. 무시", flush=True)
                 msg = await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.", delete_after=3)
-                self.mark_message_as_processed(message.id)
-                return
-
-            # 이미 출석했는지 확인
-            if cache_key in self.attendance_cache:
-                print("이미 출석한 사용자. 무시", flush=True)
-                msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", delete_after=3)
                 self.mark_message_as_processed(message.id)
                 return
 
