@@ -656,13 +656,6 @@ async def on_message(message):
         print("출석 채널이 아님. 무시", flush=True)
         return
         
-    print(f"\n=== 메시지 처리 시작 ===", flush=True)
-    print(f"메시지 ID: {message.id}", flush=True)
-    print(f"작성자: {message.author.name}", flush=True)
-    print(f"채널: {message.channel.name}", flush=True)
-    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}", flush=True)
-    print(f"전송된 메시지 수: {len(bot.message_sent)}", flush=True)
-    
     # 이미 처리 중인 메시지인 경우 무시
     if message.id in bot.processing_messages:
         print("이미 처리 중인 메시지입니다. 무시합니다.", flush=True)
@@ -673,59 +666,62 @@ async def on_message(message):
         print("이미 전송된 메시지입니다. 무시합니다.", flush=True)
         return
         
+    print(f"\n=== 메시지 처리 시작 ===", flush=True)
+    print(f"메시지 ID: {message.id}", flush=True)
+    print(f"작성자: {message.author.name}", flush=True)
+    print(f"채널: {message.channel.name}", flush=True)
+    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}", flush=True)
+    print(f"전송된 메시지 수: {len(bot.message_sent)}", flush=True)
+    
     # 메시지 ID를 처리 중인 메시지 집합에 추가
     bot.processing_messages.add(message.id)
     print("메시지 처리 시작", flush=True)
     
-    user_id = message.author.id
-    today = datetime.now(KST).strftime('%Y-%m-%d')
-    
-    # 메시지 히스토리 확인
-    cache_key = f"{user_id}_{today}"
-    if cache_key in bot.message_history:
-        last_message_time = bot.message_history[cache_key]
-        current_time = datetime.now(KST)
-        time_diff = (current_time - last_message_time).total_seconds()
-        
-        print(f"마지막 메시지로부터 {time_diff}초 경과")
-        
-        # 5초 이내에 같은 사용자의 메시지가 있다면 무시
-        if time_diff < 5:
-            print("5초 이내의 중복 메시지입니다. 무시합니다.", flush=True)
-            bot.processing_messages.remove(message.id)
-            return
-    
-    # 캐시에서 오늘 출석 여부 확인
-    if cache_key in bot.attendance_cache:
-        print("캐시에서 출석 정보 확인됨", flush=True)
-        tomorrow = datetime.now(KST) + timedelta(days=1)
-        tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-        current_time = datetime.now(KST)
-        time_until_next = tomorrow - current_time
-        
-        hours = int(time_until_next.total_seconds() // 3600)
-        minutes = int((time_until_next.total_seconds() % 3600) // 60)
-        
-        # 메시지 전송 전에 ID를 저장
-        bot.message_sent.add(message.id)
-        print("중복 출석 메시지 전송", flush=True)
-        
-        await message.channel.send(
-            f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
-            f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
-            delete_after=3
-        )
-        bot.processing_messages.remove(message.id)
-        print("=== 메시지 처리 완료 ===\n", flush=True)
-        return
-    
-    conn = get_db_connection()
-    if not conn:
-        print("데이터베이스 연결 실패", flush=True)
-        bot.processing_messages.remove(message.id)
-        return
-
     try:
+        user_id = message.author.id
+        today = datetime.now(KST).strftime('%Y-%m-%d')
+        
+        # 메시지 히스토리 확인
+        cache_key = f"{user_id}_{today}"
+        if cache_key in bot.message_history:
+            last_message_time = bot.message_history[cache_key]
+            current_time = datetime.now(KST)
+            time_diff = (current_time - last_message_time).total_seconds()
+            
+            print(f"마지막 메시지로부터 {time_diff}초 경과", flush=True)
+            
+            # 5초 이내에 같은 사용자의 메시지가 있다면 무시
+            if time_diff < 5:
+                print("5초 이내의 중복 메시지입니다. 무시합니다.", flush=True)
+                return
+        
+        # 캐시에서 오늘 출석 여부 확인
+        if cache_key in bot.attendance_cache:
+            print("캐시에서 출석 정보 확인됨", flush=True)
+            tomorrow = datetime.now(KST) + timedelta(days=1)
+            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+            current_time = datetime.now(KST)
+            time_until_next = tomorrow - current_time
+            
+            hours = int(time_until_next.total_seconds() // 3600)
+            minutes = int((time_until_next.total_seconds() % 3600) // 60)
+            
+            # 메시지 전송 전에 ID를 저장
+            bot.message_sent.add(message.id)
+            print("중복 출석 메시지 전송", flush=True)
+            
+            await message.channel.send(
+                f"{message.author.mention} 이미 오늘은 출석하셨습니다!\n"
+                f"다음 출석까지 {hours}시간 {minutes}분 남았습니다.",
+                delete_after=3
+            )
+            return
+        
+        conn = get_db_connection()
+        if not conn:
+            print("데이터베이스 연결 실패", flush=True)
+            return
+
         cur = conn.cursor()
         
         # 현재 사용자 정보 확인
