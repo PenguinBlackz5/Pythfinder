@@ -420,6 +420,7 @@ class AttendanceBot(commands.Bot):
         self.load_attendance_channels()
         self.processing_messages = set()  # 처리 중인 메시지 ID를 저장하는 집합 추가
         self.attendance_cache = {}  # 출석 캐시 추가
+        self.message_history = {}  # 메시지 히스토리 추가
 
     async def setup_hook(self):
         # 슬래시 명령어 동기화
@@ -630,8 +631,19 @@ async def on_message(message):
     user_id = message.author.id
     today = datetime.now(KST).strftime('%Y-%m-%d')
     
-    # 캐시에서 오늘 출석 여부 확인
+    # 메시지 히스토리 확인
     cache_key = f"{user_id}_{today}"
+    if cache_key in bot.message_history:
+        last_message_time = bot.message_history[cache_key]
+        current_time = datetime.now(KST)
+        time_diff = (current_time - last_message_time).total_seconds()
+        
+        # 5초 이내에 같은 사용자의 메시지가 있다면 무시
+        if time_diff < 5:
+            bot.processing_messages.remove(message.id)
+            return
+    
+    # 캐시에서 오늘 출석 여부 확인
     if cache_key in bot.attendance_cache:
         tomorrow = datetime.now(KST) + timedelta(days=1)
         tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -670,6 +682,7 @@ async def on_message(message):
             if last_attendance and last_attendance.strftime('%Y-%m-%d') == today:
                 # 캐시에 출석 정보 저장
                 bot.attendance_cache[cache_key] = True
+                bot.message_history[cache_key] = datetime.now(KST)
                 
                 tomorrow = datetime.now(KST) + timedelta(days=1)
                 tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -718,6 +731,7 @@ async def on_message(message):
         
         # 캐시에 출석 정보 저장
         bot.attendance_cache[cache_key] = True
+        bot.message_history[cache_key] = datetime.now(KST)
         
         # 출석 메시지 전송 (한 번만)
         sent_message = await message.channel.send(
