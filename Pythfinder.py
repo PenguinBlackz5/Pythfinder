@@ -760,13 +760,20 @@ async def set_attendance_channel(interaction: discord.Interaction):
     print(f"채널 ID: {channel_id}", flush=True)
     print(f"현재 등록된 출석 채널: {bot.attendance_channels}", flush=True)
     
-    # 먼저 응답 대기 상태로 전환
-    await interaction.response.defer(ephemeral=True)
+    try:
+        # 먼저 응답 대기 상태로 전환
+        await interaction.response.defer(ephemeral=True)
+    except discord.NotFound:
+        print("상호작용이 만료되었습니다.", flush=True)
+        return
     
     conn = get_db_connection()
     if not conn:
         print("데이터베이스 연결 실패", flush=True)
-        await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+        try:
+            await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+        except discord.NotFound:
+            print("상호작용이 만료되었습니다.", flush=True)
         return
 
     try:
@@ -792,12 +799,16 @@ async def set_attendance_channel(interaction: discord.Interaction):
             print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)
         else:
             print("등록된 채널이 없습니다.", flush=True)
+            bot.attendance_channels = set()  # 빈 집합으로 초기화
         
-        await interaction.followup.send(
-            f"✅ 이 채널이 출석 채널로 지정되었습니다!\n"
-            f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
-            ephemeral=True
-        )
+        try:
+            await interaction.followup.send(
+                f"✅ 이 채널이 출석 채널로 지정되었습니다!\n"
+                f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
+                ephemeral=True
+            )
+        except discord.NotFound:
+            print("상호작용이 만료되었습니다.", flush=True)
         
     except Exception as e:
         print(f"채널 등록 중 오류 발생: {e}", flush=True)
