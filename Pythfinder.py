@@ -646,8 +646,8 @@ async def on_message(message):
     print(f"채널: {message.channel.name}", flush=True)
     print("="*50 + "\n", flush=True)
     
-    # 봇 메시지 무시
-    if message.author.bot:
+    # 봇 메시지 무시 (자신의 메시지도 무시)
+    if message.author.bot or message.author.id == bot.user.id:
         print("봇 메시지 무시", flush=True)
         return
         
