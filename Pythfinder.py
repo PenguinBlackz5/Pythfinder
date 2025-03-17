@@ -793,7 +793,7 @@ async def check_attendance(interaction: discord.Interaction):
             # 다음 출석까지 남은 시간 계산
             now = datetime.now(KST)
             next_attendance = last_attendance + timedelta(days=1)
-            next_attendance = next_attendance.replace(hour=0, minute=0, second=0, microsecond=0)
+            next_attendance = next_attendance.replace(hour=0, minute=0, second=0)
             time_left = next_attendance - now
             
             if time_left.total_seconds() <= 0:
