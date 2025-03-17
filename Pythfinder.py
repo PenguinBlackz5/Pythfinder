@@ -429,10 +429,16 @@ class AttendanceBot(commands.Bot):
 
     async def setup_hook(self):
         print("\n=== 이벤트 핸들러 등록 시작 ===")
-        # 이벤트 핸들러 등록
-        self.add_listener(self.on_ready)
-        self.add_listener(self.on_message)
-        print("이벤트 핸들러 등록 완료")
+        # 슬래시 명령어 동기화
+        try:
+            print("슬래시 명령어 동기화 시작...")
+            synced = await self.tree.sync()
+            print(f"동기화된 슬래시 명령어: {len(synced)}개")
+            # 동기화된 명령어 목록 출력
+            for cmd in synced:
+                print(f"- {cmd.name}")
+        except Exception as e:
+            print(f"슬래시 명령어 동기화 중 오류 발생: {e}")
         print("=== 이벤트 핸들러 등록 완료 ===\n")
 
     def init_database(self):
