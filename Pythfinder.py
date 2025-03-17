@@ -427,16 +427,12 @@ class AttendanceBot(commands.Bot):
         print("=== 봇 초기화 완료 ===\n")
 
     async def setup_hook(self):
-        # 슬래시 명령어 동기화
-        try:
-            print("슬래시 명령어 동기화 시작...")
-            synced = await self.tree.sync()
-            print(f"동기화된 슬래시 명령어: {len(synced)}개")
-            # 동기화된 명령어 목록 출력
-            for cmd in synced:
-                print(f"- {cmd.name}")
-        except Exception as e:
-            print(f"슬래시 명령어 동기화 중 오류 발생: {e}")
+        print("\n=== 이벤트 핸들러 등록 시작 ===")
+        # 이벤트 핸들러 등록
+        self.add_listener(self.on_ready)
+        self.add_listener(self.on_message)
+        print("이벤트 핸들러 등록 완료")
+        print("=== 이벤트 핸들러 등록 완료 ===\n")
 
     def init_database(self):
         conn = get_db_connection()
@@ -499,13 +495,14 @@ bot = AttendanceBot()
 
 @bot.event
 async def on_ready():
-    print(f'\n=== 봇 로그인 완료 ===')
-    print(f'봇 이름: {bot.user}')
-    print(f'봇 ID: {bot.user.id}')
-    print(f'서버 수: {len(bot.guilds)}')
-    print(f'캐시된 메시지 수: {len(bot.message_sent)}')
-    print(f'처리 중인 메시지 수: {len(bot.processing_messages)}')
-    print('=====================\n')
+    print("\n" + "="*50)
+    print("봇이 준비되었습니다!")
+    print(f"봇 이름: {bot.user}")
+    print(f"봇 ID: {bot.user.id}")
+    print(f"서버 수: {len(bot.guilds)}")
+    print(f"캐시된 메시지 수: {len(bot.message_sent)}")
+    print(f"처리 중인 메시지 수: {len(bot.processing_messages)}")
+    print("="*50 + "\n")
     
     # 봇이 시작될 때 명령어 동기화 상태 확인
     try:
@@ -623,12 +620,21 @@ async def check_balance(interaction: discord.Interaction):
 
 @bot.event
 async def on_message(message):
+    print("\n" + "="*50)
+    print("메시지 이벤트 발생!")
+    print(f"메시지 ID: {message.id}")
+    print(f"작성자: {message.author.name}")
+    print(f"채널: {message.channel.name}")
+    print("="*50 + "\n")
+    
     # 봇 메시지 무시
     if message.author.bot:
+        print("봇 메시지 무시")
         return
         
     # 출석 채널이 아니면 무시
     if message.channel.id not in bot.attendance_channels:
+        print("출석 채널이 아님. 무시")
         return
         
     print(f"\n=== 메시지 처리 시작 ===")
