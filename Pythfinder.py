@@ -643,34 +643,75 @@ class AttendanceBot(commands.Bot):
             today = datetime.now(KST).strftime('%Y-%m-%d')
             cache_key = f"{user_id}_{today}"
 
-            # 이미 출석했는지 먼저 확인
-            if cache_key in self.attendance_cache:
-                print("이미 출석한 사용자. 무시", flush=True)
+            # 데이터베이스에서 먼저 출석 여부 확인
+            conn = get_db_connection()
+            if not conn:
+                print("데이터베이스 연결 실패", flush=True)
+                return
+
+            cur = conn.cursor()
+            
+            cur.execute('''
+                SELECT last_attendance 
+                FROM attendance 
+                WHERE user_id = %s AND DATE(last_attendance) = %s
+            ''', (user_id, today))
+            
+            if cur.fetchone():
+                print(f"이미 오늘 출석한 사용자: {user_id}", flush=True)
                 msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", delete_after=3)
                 self.mark_message_as_processed(message.id)
                 return
 
-            # 5초 이내의 중복 메시지인지 확인
-            if self.is_duplicate_message(user_id, today):
-                print("5초 이내 중복 메시지. 무시", flush=True)
-                msg = await message.channel.send(f"{message.author.mention}님, 5초 이내에 다시 출석하셨습니다.", delete_after=3)
-                self.mark_message_as_processed(message.id)
-                return
-
-            print("출석 처리 시작", flush=True)
-            # 출석 처리
-            await self.process_attendance(message)
+            # 현재 사용자 정보 확인
+            cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
+            result = cur.fetchone()
             
-            # 메시지 히스토리와 캐시 업데이트
-            self.update_message_history(user_id, today)
-            self.update_attendance_cache(user_id, today)
+            if result:
+                last_attendance = result[0]
+                current_streak = result[1]
+                current_money = result[2]
+                
+                # 연속 출석 확인
+                yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
+                if last_attendance and last_attendance.strftime('%Y-%m-%d') == yesterday:
+                    streak = current_streak + 1
+                else:
+                    streak = 1
+            else:
+                # 새로운 사용자
+                current_money = 0
+                streak = 1
+                
+            # 출석 순서 확인
+            cur.execute('''
+                SELECT COUNT(*) FROM attendance 
+                WHERE DATE(last_attendance) = %s AND user_id != %s
+            ''', (today, user_id))
+            attendance_order = cur.fetchone()[0] + 1
             
-            # 메시지를 처리 완료로 표시
-            self.mark_message_as_processed(message.id)
-            print("출석 처리 완료", flush=True)
-
+            # 출석 정보 업데이트
+            cur.execute('''
+                INSERT INTO attendance (user_id, last_attendance, streak, money)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE 
+                SET last_attendance = %s, 
+                    streak = %s, 
+                    money = attendance.money + 10
+            ''', (user_id, today, streak, current_money + 10, today, streak))
+            
+            conn.commit()
+            
+            # 출석 메시지 전송
+            await message.channel.send(
+                f"🎉 {message.author.mention}님 출석하셨습니다!\n"
+                f"오늘 {attendance_order}번째 출석이에요.\n"
+                f"현재 {streak}일 연속 출석 중입니다!\n"
+                f"💰 출석 보상 10원이 지급되었습니다."
+            )
+            
         except Exception as e:
-            print(f"메시지 처리 중 오류 발생: {e}", flush=True)
+            print(f"출석 처리 중 오류 발생: {e}", flush=True)
             self.clear_processing_message(message.id)
 
     async def process_attendance(self, message):
@@ -689,6 +730,17 @@ class AttendanceBot(commands.Bot):
 
             cur = conn.cursor()
             
+            # 먼저 오늘 이미 출석했는지 확인
+            cur.execute('''
+                SELECT last_attendance 
+                FROM attendance 
+                WHERE user_id = %s AND DATE(last_attendance) = %s
+            ''', (user_id, today))
+            
+            if cur.fetchone():
+                print(f"이미 오늘 출석한 사용자: {user_id}", flush=True)
+                return
+
             # 현재 사용자 정보 확인
             cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
             result = cur.fetchone()
