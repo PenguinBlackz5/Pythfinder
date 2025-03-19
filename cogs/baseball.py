@@ -69,7 +69,6 @@ class Baseball(commands.Cog):
 
             # DM으로 게임 진행
             try:
-                await interaction.user.send("게임이 시작되었습니다! DM을 확인해주세요.")
                 await interaction.response.send_message("게임이 시작되었습니다! DM을 확인해주세요.", ephemeral=True)
             except discord.Forbidden:
                 await interaction.response.send_message("DM을 보낼 수 없습니다. DM 설정을 확인해주세요.", ephemeral=True)
@@ -86,7 +85,7 @@ class Baseball(commands.Cog):
                     f"숫자야구 게임이 시작되었습니다!\n"
                     f"0~9 사이의 중복되지 않는 3자리 숫자를 맞춰보세요.\n"
                     f"기회는 총 {attempts_left}번 있습니다.\n"
-                    f"맞추면 베팅금의 {multiplier}배를 받을 수 있습니다!\n"
+                    f"남은 기회에 비례하여, 맞추면 최대 {multiplier}배를 받을 수 있습니다!\n"
                     f"숫자를 입력해주세요 (예: 123)"
                 )
             except discord.Forbidden:
@@ -131,14 +130,14 @@ class Baseball(commands.Cog):
                                 conn.close()
 
                         # DM으로 승리 메시지 전송
-                        await interaction.user.send(f"정답입니다! {target_number}")
+                        await interaction.user.send(f"✅ 정답입니다!")
                         # 원래 채널에 결과 전송
-                        await interaction.channel.send(f"{interaction.user.mention}님 축하합니다! 숫자야구 게임에서 승리하여 {winnings}원을 획득했습니다!")
+                        await interaction.channel.send(f"{interaction.user.mention}님 축하합니다! 숫자야구 게임에서 승리하여 베팅금 {bet_amount}원의 {multiplier}✖️인 💰 ***{winnings}원**을 획득했습니다!*")
                         del self.active_games[interaction.user.id]
                         return
 
-                    await interaction.user.send(f"결과: {strikes}스트라이크 {balls}볼\n"
-                                        f"남은 기회: {attempts_left - 1}번")
+                    await interaction.user.send(f"✅ **{strikes} 스트라이크** \n **{balls} 볼**\n"
+                                        f"남은 기회 🔄️ ***{attempts_left - 1}번***")
 
                     attempts_left -= 1
                     multiplier -= 2
@@ -151,7 +150,7 @@ class Baseball(commands.Cog):
             # DM으로 결과 전송
             await interaction.user.send(f"아쉽게도 모든 기회를 사용했습니다. 정답은 {target_number}였습니다.")
             # 원래 채널에 결과 전송
-            await interaction.channel.send(f"{interaction.user.mention}님의 숫자야구 게임이 종료되었습니다. 아쉽게도 정답을 맞추지 못하여 {bet_amount}원을 잃었습니다.")
+            await interaction.channel.send(f"{interaction.user.mention}님의 숫자야구 게임이 종료되었습니다. 아쉽게도 정답을 맞추지 못하여 💸 ***{bet_amount}원**을 잃었습니다.*")
             del self.active_games[interaction.user.id]
 
 async def setup(bot: commands.Bot):
