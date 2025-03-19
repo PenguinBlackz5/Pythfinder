@@ -47,12 +47,7 @@ class Baseball(commands.Cog):
                 return
                 
             # 베팅금 차감
-            cur.execute('''
-                UPDATE attendance 
-                SET money = money - %s 
-                WHERE user_id = %s
-            ''', (bet_amount, ctx.author.id))
-            
+            cur.execute('''UPDATE attendance SET money = money - %s WHERE user_id = %s''', (bet_amount, ctx.author.id))
             conn.commit()
             
         except Exception as e:
@@ -104,11 +99,7 @@ class Baseball(commands.Cog):
                     if conn:
                         try:
                             cur = conn.cursor()
-                            cur.execute('''
-                                UPDATE attendance 
-                                SET money = money + %s 
-                                WHERE user_id = %s
-                            ''', (winnings, ctx.author.id))
+                            cur.execute('''UPDATE attendance SET money = money + %s WHERE user_id = %s''', (winnings, ctx.author.id))
                             conn.commit()
                         except Exception as e:
                             print(f"승리 금액 지급 중 오류 발생: {e}")
