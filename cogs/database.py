@@ -33,6 +33,31 @@ def fetch_all_data(table_name):
     finally:
         conn.close()  # 연결 종료
 
+class TableNameTransformer(app_commands.Transformer):
+    async def transform(self, interaction: discord.Interaction, table_name: str) -> str:
+        """사용자가 선택한 테이블 이름을 반환"""
+        return table_name
+
+    async def autocomplete(self, interaction: discord.Interaction, current: str):
+        """데이터베이스에서 테이블 목록을 가져와 자동 완성"""
+        tables = get_table_list()  # 데이터베이스에서 테이블 목록 가져오기
+        return [
+            app_commands.Choice(name=table, value=table)
+            for table in tables if current.lower() in table.lower()
+        ]
+
+def get_table_list():
+    """PostgreSQL 데이터베이스에서 테이블 목록을 가져오는 함수"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tablename FROM pg_catalog.pg_tables
+        WHERE schemaname = 'public';
+    """)  # 'public' 스키마의 테이블 목록 조회
+    tables = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return tables
+
 
 class Database(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -215,18 +240,26 @@ class Database(commands.Cog):
 
 
         @bot.tree.command(name="디비조회", description="데이터베이스의 테이블 내용을 조회합니다. (개발자 전용)")
-        @app_commands.describe(table_name="테이블 이름")
-        async def show_table(interaction: discord.Interaction, table_name: str):
+        @app_commands.describe(table_name="조회할 테이블을 선택하세요.")
+        async def show_table(interaction: discord.Interaction, table_name: app_commands.Transform[str, TableNameTransformer]):
             """사용자가 입력한 테이블의 모든 컬럼 내용을 출력"""
+
+            # 개발자 권한 확인
+            if interaction.user.id not in DEVELOPER_IDS:
+                await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True)
+
             result = fetch_all_data(table_name)
 
             # 너무 긴 경우 파일로 저장하여 전송
             if len(result) > 2000:  # 디스코드 메시지 제한 (2000자)
                 with open("output.txt", "w", encoding="utf-8") as f:
                     f.write(result)
-                await interaction.response.send_message("데이터가 너무 길어 파일로 전송합니다.", file=discord.File("output.txt"))
+                await interaction.followup.send("데이터가 너무 길어 파일로 전송합니다.", file=discord.File("output.txt"))
             else:
-                await interaction.response.send_message(f"```\n{result}\n```")  # 코드 블록으로 가독성 높이기
+                await interaction.followup.send(f"```\n{result}\n```")
 
 
 async def setup(bot: commands.Bot):
