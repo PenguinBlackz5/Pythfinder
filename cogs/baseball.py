@@ -130,8 +130,10 @@ class Baseball(commands.Cog):
                             finally:
                                 conn.close()
 
-                        await interaction.user.send(f"정답입니다! {target_number}\n"
-                                            f"축하합니다! {winnings}원을 획득했습니다!")
+                        # DM으로 승리 메시지 전송
+                        await interaction.user.send(f"정답입니다! {target_number}")
+                        # 원래 채널에 결과 전송
+                        await interaction.channel.send(f"{interaction.user.mention}님 축하합니다! 숫자야구 게임에서 승리하여 {winnings}원을 획득했습니다!")
                         del self.active_games[interaction.user.id]
                         return
 
@@ -146,8 +148,10 @@ class Baseball(commands.Cog):
                     await interaction.user.send("시간이 초과되었습니다. 게임이 종료됩니다.")
                     del self.active_games[interaction.user.id]
                     return
-
-            await interaction.user.send(f"게임이 종료되었습니다. 정답은 {target_number}였습니다.")
+            # DM으로 결과 전송
+            await interaction.user.send(f"아쉽게도 모든 기회를 사용했습니다. 정답은 {target_number}였습니다.")
+            # 원래 채널에 결과 전송
+            await interaction.channel.send(f"{interaction.user.mention}님의 숫자야구 게임이 종료되었습니다. 아쉽게도 정답을 맞추지 못하여 {bet_amount}원을 잃었습니다.")
             del self.active_games[interaction.user.id]
 
 async def setup(bot: commands.Bot):
