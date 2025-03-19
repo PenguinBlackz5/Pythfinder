@@ -93,15 +93,25 @@ class admin(commands.Cog):
         async def check_server_attendance(interaction: discord.Interaction):
             # 개발자 권한 확인
             if interaction.user.id not in DEVELOPER_IDS:
-                await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                try:
+                    await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                except discord.NotFound:
+                    print("상호작용이 만료되었습니다.", flush=True)
                 return
 
             # DM에서 실행 방지
             if not interaction.guild:
-                await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
+                try:
+                    await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
+                except discord.NotFound:
+                    print("상호작용이 만료되었습니다.", flush=True)
                 return
 
-            await interaction.response.defer(ephemeral=True)
+            try:
+                await interaction.response.defer(ephemeral=True)
+            except discord.NotFound:
+                print("상호작용이 만료되었습니다.", flush=True)
+                return
 
             try:
                 guild = interaction.guild
@@ -109,7 +119,10 @@ class admin(commands.Cog):
 
                 conn = get_db_connection()
                 if not conn:
-                    await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+                    try:
+                        await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+                    except discord.NotFound:
+                        print("상호작용이 만료되었습니다.", flush=True)
                     return
 
                 cur = conn.cursor()
@@ -122,7 +135,10 @@ class admin(commands.Cog):
                 member_id_str = ','.join(str(id) for id in member_ids)
 
                 if not member_ids:
-                    await interaction.followup.send("서버에 멤버가 없습니다.", ephemeral=True)
+                    try:
+                        await interaction.followup.send("서버에 멤버가 없습니다.", ephemeral=True)
+                    except discord.NotFound:
+                        print("상호작용이 만료되었습니다.", flush=True)
                     return
 
                 cur.execute(f'''
@@ -176,19 +192,29 @@ class admin(commands.Cog):
                 if len(message) > 2000:
                     parts = [message[i:i + 1990] for i in range(0, len(message), 1990)]
                     for i, part in enumerate(parts):
-                        if i == 0:
-                            await interaction.followup.send(part, ephemeral=True)
-                        else:
-                            await interaction.followup.send(part, ephemeral=True)
+                        try:
+                            if i == 0:
+                                await interaction.followup.send(part, ephemeral=True)
+                            else:
+                                await interaction.followup.send(part, ephemeral=True)
+                        except discord.NotFound:
+                            print("상호작용이 만료되었습니다.", flush=True)
+                            return
                 else:
-                    await interaction.followup.send(message, ephemeral=True)
+                    try:
+                        await interaction.followup.send(message, ephemeral=True)
+                    except discord.NotFound:
+                        print("상호작용이 만료되었습니다.", flush=True)
 
             except Exception as e:
                 print(f"출석 현황 조회 중 오류 발생: {e}", flush=True)
-                await interaction.followup.send(
-                    f"❌ 출석 현황 조회 중 오류가 발생했습니다.\n```{str(e)}```",
-                    ephemeral=True
-                )
+                try:
+                    await interaction.followup.send(
+                        f"❌ 출석 현황 조회 중 오류가 발생했습니다.\n```{str(e)}```",
+                        ephemeral=True
+                    )
+                except discord.NotFound:
+                    print("상호작용이 만료되었습니다.", flush=True)
             finally:
                 if conn:
                     conn.close()
