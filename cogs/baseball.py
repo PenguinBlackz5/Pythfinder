@@ -69,6 +69,7 @@ class Baseball(commands.Cog):
 
             # DM으로 게임 진행
             try:
+                await interaction.user.send("게임이 시작되었습니다! DM을 확인해주세요.")
                 await interaction.response.send_message("게임이 시작되었습니다! DM을 확인해주세요.", ephemeral=True)
             except discord.Forbidden:
                 await interaction.response.send_message("DM을 보낼 수 없습니다. DM 설정을 확인해주세요.", ephemeral=True)
