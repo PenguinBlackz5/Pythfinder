@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import datetime
+from datetime import datetime
 
 from Pythfinder import DEVELOPER_IDS, get_db_connection, KST, RankingView, ClearAllView, is_admin_or_developer
 
