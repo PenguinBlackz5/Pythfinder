@@ -3,6 +3,7 @@ import os
 import discord
 from discord import app_commands
 from discord.ext import commands
+from datetime import datetime, timezone, timedelta
 import requests
 import datetime
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ class Version(commands.Cog):
         self.local_commit_hash = None
         self.local_commit_date = None
         self.local_commit_message = None
+        self.local_commit_author = None
 
         # 봇이 시작될 때 로컬 버전 정보 가져오기
         self.get_local_version()
@@ -31,32 +33,53 @@ class Version(commands.Cog):
 
             self.local_commit_hash = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"],
-                universal_newlines=True
+                universal_newlines=True,
+                encoding="utf-8"
             ).strip()[:7]  # 7자리만 사용
 
             # 현재 커밋 날짜 가져오기
             date_str = subprocess.check_output(
                 ["git", "show", "-s", "--format=%ci", "HEAD"],
-                universal_newlines=True
+                universal_newlines=True,
+                encoding="utf-8"
             ).strip()
             self.local_commit_date = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
 
             # 현재 커밋 메시지 가져오기
             self.local_commit_message = subprocess.check_output(
                 ["git", "show", "-s", "--format=%s", "HEAD"],
-                universal_newlines=True
+                universal_newlines=True,
+                encoding="utf-8"
             ).strip()
 
-            print(f"로컬 버전 정보 로드 완료: {self.local_commit_hash}")
+            # 현재 커밋 작성자 가져오기
+            self.local_commit_author = subprocess.check_output(
+                ["git", "show", "-s", "--format=%an", "HEAD"],
+                universal_newlines=True,
+                encoding="utf-8"
+            )
+
+            print(f"✅ 로컬 버전 정보 로드 완료: {self.local_commit_hash}")
         except Exception as e:
             print(f"로컬 버전 정보 로드 실패: {e}")
             self.local_commit_hash = "unknown"
             self.local_commit_date = datetime.datetime.now()
             self.local_commit_message = "Git 정보를 가져올 수 없습니다."
+        except FileNotFoundError as e:
+            print(e)
 
+    PUBLIC_OR_NOT_CHOICES = [
+        app_commands.Choice(name="True", value="True"),
+        app_commands.Choice(name="False", value="False")
+        ]
     @app_commands.command(name="버전", description="봇의 현재 버전과 최신 업데이트 정보를 확인합니다.")
-    async def version(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+    @app_commands.describe(public="공개 메세지 여부를 선택하세요.")
+    @app_commands.choices(public=PUBLIC_OR_NOT_CHOICES)
+    async def version(self, interaction: discord.Interaction, public: app_commands.Choice[str]):
+        if public == "True":
+            await interaction.response.defer(ephemeral=True)
+        else:
+            await interaction.response.defer()
 
         try:
             # GitHub API를 통해 최신 커밋 정보 가져오기
@@ -87,6 +110,13 @@ class Version(commands.Cog):
                     remote_commit_date = datetime.datetime.strptime(remote_date_str, "%Y-%m-%dT%H:%M:%SZ")
                     remote_formatted_date = remote_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
 
+                    # UTC에서 KST로 변환 (UTC + 9시간)
+                    kst_timezone = timezone(timedelta(hours=9))
+                    remote_commit_date_kst = remote_commit_date.replace(tzinfo=timezone.utc).astimezone(kst_timezone)
+
+                    # KST로 포맷팅
+                    remote_formatted_date = remote_commit_date_kst.strftime("%Y년 %m월 %d일 %H:%M")
+
                     # 로컬 커밋 날짜 포맷팅
                     local_formatted_date = self.local_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
 
@@ -105,14 +135,14 @@ class Version(commands.Cog):
                     # 현재 버전 필드
                     embed.add_field(
                         name="📌 현재 실행 중인 버전",
-                        value=f"```커밋: {self.local_commit_hash}\n날짜: {local_formatted_date}\n메시지: {self.local_commit_message}```",
+                        value=f"```커밋: {self.local_commit_hash}\n날짜: {local_formatted_date}\n메시지: {remote_commit_author} / {self.local_commit_message}```",
                         inline=False
                     )
 
                     # 최신 버전 필드
                     embed.add_field(
                         name="🔄 GitHub 최신 버전",
-                        value=f"```커밋: {remote_commit_hash}\n날짜: {remote_formatted_date}\n메시지: {remote_commit_message}```\n[GitHub에서 보기]({remote_commit_url})",
+                        value=f"```커밋: {remote_commit_hash}\n날짜: {remote_formatted_date}\n메시지: {remote_commit_author} / {remote_commit_message}```\n[GitHub에서 보기]({remote_commit_url})",
                         inline=False
                     )
 
