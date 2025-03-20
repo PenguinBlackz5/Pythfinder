@@ -86,7 +86,7 @@ class Baseball(commands.Cog):
                     f"숫자야구 게임이 시작되었습니다!\n"
                     f"0~9 사이의 중복되지 않는 3자리 숫자를 맞춰보세요.\n"
                     f"기회는 총 {attempts_left}번 있습니다.\n"
-                    f"맞추면 베팅금의 {multiplier}배를 받을 수 있습니다!\n"
+                    f"맞추면 베팅금의 {multiplier:.1f}배를 받을 수 있습니다!\n"
                     f"숫자를 입력해주세요 (예: 123)"
                 )
             except discord.Forbidden:
@@ -131,9 +131,10 @@ class Baseball(commands.Cog):
                                 conn.close()
 
                         # DM으로 승리 메시지 전송
-                        await interaction.user.send(f"✅ 정답입니다!")
+                        await interaction.user.send(f"정답입니다! {target_number}\n"
+                                                    f"축하합니다! 베팅금 {bet_amount}원의 {multiplier:.1f}배인 💰 {winnings}원을 획득했습니다!")
                         # 원래 채널에 결과 전송
-                        await interaction.channel.send(f"{interaction.user.mention}님 축하합니다! 숫자야구 게임에서 승리하여 베팅금 {bet_amount}원의 {multiplier}✖️인 💰 ***{winnings}원**을 획득했습니다!*")
+                        await interaction.channel.send(f"{interaction.user.mention}님 축하합니다! 숫자야구 게임에서 승리하여 베팅금 {bet_amount}원의 {multiplier:.1f}✖️인 💰 ***{winnings}원**을 획득했습니다!*")
                         del self.active_games[interaction.user.id]
                         return
 
