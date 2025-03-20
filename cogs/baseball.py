@@ -77,7 +77,7 @@ class Baseball(commands.Cog):
 
             target_number = generate_number()
             attempts_left = 5
-            multiplier = 10
+            multiplier = 2.0  # 초기 배당률을 2.0배로 변경
 
             self.active_games[interaction.user.id] = (target_number, bet_amount, attempts_left, multiplier)
 
@@ -86,7 +86,7 @@ class Baseball(commands.Cog):
                     f"숫자야구 게임이 시작되었습니다!\n"
                     f"0~9 사이의 중복되지 않는 3자리 숫자를 맞춰보세요.\n"
                     f"기회는 총 {attempts_left}번 있습니다.\n"
-                    f"남은 기회에 비례하여, 맞추면 최대 {multiplier}배를 받을 수 있습니다!\n"
+                    f"맞추면 베팅금의 {multiplier}배를 받을 수 있습니다!\n"
                     f"숫자를 입력해주세요 (예: 123)"
                 )
             except discord.Forbidden:
@@ -113,7 +113,7 @@ class Baseball(commands.Cog):
                     strikes, balls = check_number(target_number, guess_number)
 
                     if strikes == 3:
-                        winnings = bet_amount * multiplier
+                        winnings = round(bet_amount * multiplier)  # 소수점 일의자리에서 반올림
                         # 승리 금액 지급
                         conn = get_db_connection()
                         if conn:
@@ -141,7 +141,7 @@ class Baseball(commands.Cog):
                                         f"남은 기회 🔄️ ***{attempts_left - 1}번***")
 
                     attempts_left -= 1
-                    multiplier -= 2
+                    multiplier -= 0.2  # 시도마다 0.2씩 감소하도록 변경
                     self.active_games[interaction.user.id] = (target_number, bet_amount, attempts_left, multiplier)
 
                 except asyncio.TimeoutError:
