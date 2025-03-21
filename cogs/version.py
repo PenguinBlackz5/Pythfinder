@@ -65,7 +65,7 @@ class Version(commands.Cog):
         except Exception as e:
             print(f"로컬 버전 정보 로드 실패: {e}")
             self.local_commit_hash = None
-            self.local_commit_date = "unknown"
+            self.local_commit_date = None
             self.local_commit_message = "Git 정보를 가져올 수 없습니다."
             self.local_commit_author = "홍길동"
         except FileNotFoundError as e:
@@ -121,7 +121,10 @@ class Version(commands.Cog):
                     remote_formatted_date = remote_commit_date_kst.strftime("%Y년 %m월 %d일 %H:%M")
 
                     # 로컬 커밋 날짜 포맷팅
-                    local_formatted_date = self.local_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
+                    if self.local_commit_date is not None:
+                        local_formatted_date = self.local_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
+                    else:
+                        local_formatted_date = "unknown"
 
                     # 버전 비교
                     if self.local_commit_hash:
