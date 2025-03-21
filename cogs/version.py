@@ -8,6 +8,7 @@ import requests
 import datetime
 from dotenv import load_dotenv
 import subprocess
+import pytz
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
@@ -110,10 +111,9 @@ class Version(commands.Cog):
                     # 커밋 날짜 변환
                     remote_date_str = latest_commit['commit']['author']['date']
                     remote_commit_date = datetime.datetime.strptime(remote_date_str, "%Y-%m-%dT%H:%M:%SZ")
-                    remote_formatted_date = remote_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
 
-                    # UTC에서 KST로 변환 (UTC + 9시간)
-                    kst_timezone = timezone(timedelta(hours=9))
+                    # 한국 시간
+                    kst_timezone = pytz.timezone('Asia/Seoul')
                     remote_commit_date_kst = remote_commit_date.replace(tzinfo=timezone.utc).astimezone(kst_timezone)
 
                     # KST로 포맷팅
@@ -148,7 +148,7 @@ class Version(commands.Cog):
                         inline=False
                     )
 
-                    embed.set_footer(text=f"봇 버전 확인 시간: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    embed.set_footer(text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
 
                     await interaction.followup.send(embed=embed)
                 else:
