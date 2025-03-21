@@ -145,19 +145,31 @@ class admin(commands.Cog):
                     SELECT 
                         user_id,
                         last_attendance,
-                        streak,
-                        money
+                        streak
                     FROM attendance 
                     WHERE user_id IN ({member_id_str})
-                    ORDER BY streak DESC, money DESC
+                    ORDER BY streak DESC
                 ''')
 
-                results = cur.fetchall()
+                attendance_results = cur.fetchall()
+
+                cur.execute(f'''
+                    SELECT
+                        user_id,
+                        money
+                    FROM user_money
+                    where user_id IN ({member_id_str})
+                    ORDER BY money DESC
+                ''')
+
+                user_money_results = cur.fetchall()
+
+                print(user_money_results)
 
                 # 통계 계산
-                registered_members = len(results)
-                today_attendance = sum(1 for r in results if r[1] and r[1].strftime('%Y-%m-%d') == today)
-                total_money = sum(r[3] for r in results if r[3])
+                registered_members = len(attendance_results)
+                today_attendance = sum(1 for r in attendance_results if r[1] and r[1].strftime('%Y-%m-%d') == today)
+                total_money = sum(r[1] for r in user_money_results if r[1])
 
                 # 메시지 구성
                 message = f"📊 **{guild.name} 서버 출석 현황**\n\n"
@@ -174,15 +186,16 @@ class admin(commands.Cog):
                 message += "닉네임         연속출석  마지막출석    보유금액\n"
                 message += "------------------------------------------------\n"
 
-                for user_id, last_attendance, streak, money in results:
+                user_money_dict = {user_id: money for user_id, money in user_money_results}
+
+                for user_id, last_attendance, streak in attendance_results:
                     member = guild.get_member(user_id)
                     if member:
                         name = member.display_name[:10] + "..." if len(
-                            member.display_name) > 10 else member.display_name.ljust(
-                            10)
+                            member.display_name) > 10 else member.display_name.ljust(10)
                         last_date = last_attendance.strftime('%Y-%m-%d') if last_attendance else "없음"
                         streak = streak or 0
-                        money = money or 0
+                        money = user_money_dict.get(user_id, 0)  # user_money_results에서 해당 user_id의 money 값을 가져옴
 
                         message += f"{name:<13} {streak:<8} {last_date:<12} {money:>6}원\n"
 
