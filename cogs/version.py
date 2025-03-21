@@ -132,6 +132,7 @@ class Version(commands.Cog):
                         status_emoji = "✅" if is_latest else "⚠️"
                         status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
                     else:
+                        is_latest = False
                         self.local_commit_hash = "unknown"
                         status_emoji = "✅"
                         status_text = "최신 버전의 정보를 표시합니다."
