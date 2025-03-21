@@ -137,14 +137,14 @@ class Version(commands.Cog):
                     # 현재 버전 필드
                     embed.add_field(
                         name="📌 현재 실행 중인 버전",
-                        value=f"```커밋: {self.local_commit_hash}\n날짜: {local_formatted_date}\n메시지: {remote_commit_author} / {self.local_commit_message}```",
+                        value=f"```#️⃣: {self.local_commit_hash}\n📅: {local_formatted_date}\n🗣️: {remote_commit_author} / {self.local_commit_message}```",
                         inline=False
                     )
 
                     # 최신 버전 필드
                     embed.add_field(
                         name="🔄 GitHub 최신 버전",
-                        value=f"```커밋: {remote_commit_hash}\n날짜: {remote_formatted_date}\n메시지: {remote_commit_author} / {remote_commit_message}```\n[GitHub에서 보기]({remote_commit_url})",
+                        value=f"```#️⃣: {remote_commit_hash}\n📅: {remote_formatted_date}\n🗣️: {remote_commit_author} / {remote_commit_message}```\n[GitHub에서 보기]({remote_commit_url})",
                         inline=False
                     )
 
