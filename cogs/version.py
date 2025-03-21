@@ -64,9 +64,10 @@ class Version(commands.Cog):
             print(f"✅ 로컬 버전 정보 로드 완료: {self.local_commit_hash}")
         except Exception as e:
             print(f"로컬 버전 정보 로드 실패: {e}")
-            self.local_commit_hash = "unknown"
-            self.local_commit_date = datetime.datetime.now()
+            self.local_commit_hash = None
+            self.local_commit_date = "unknown"
             self.local_commit_message = "Git 정보를 가져올 수 없습니다."
+            self.local_commit_author = "홍길동"
         except FileNotFoundError as e:
             print(e)
 
@@ -123,9 +124,15 @@ class Version(commands.Cog):
                     local_formatted_date = self.local_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
 
                     # 버전 비교
-                    is_latest = self.local_commit_hash == remote_commit_hash
-                    status_emoji = "✅" if is_latest else "⚠️"
-                    status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
+                    if self.local_commit_hash:
+                        is_latest = self.local_commit_hash == remote_commit_hash
+                        status_emoji = "✅" if is_latest else "⚠️"
+                        status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
+                    else:
+                        self.local_commit_hash = "unknown"
+                        status_emoji = "✅"
+                        status_text = "최신 버전의 정보를 표시합니다."
+
 
                     # 임베드 생성
                     embed = discord.Embed(
@@ -135,11 +142,13 @@ class Version(commands.Cog):
                     )
 
                     # 현재 버전 필드
-                    embed.add_field(
-                        name="📌 현재 실행 중인 버전",
-                        value=f"```#️⃣: {self.local_commit_hash}\n📅: {local_formatted_date}\n🗣️: {remote_commit_author} / {self.local_commit_message}```",
-                        inline=False
-                    )
+                    if self.local_commit_hash:
+                        embed.add_field(
+                            name="📌 현재 실행 중인 버전",
+                            value=f"```#️⃣: {self.local_commit_hash}\n📅: {local_formatted_date}\n🗣️:"
+                                  f" {self.local_commit_author} / {self.local_commit_message}```",
+                            inline=False
+                        )
 
                     # 최신 버전 필드
                     embed.add_field(
@@ -148,7 +157,8 @@ class Version(commands.Cog):
                         inline=False
                     )
 
-                    embed.set_footer(text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+                    embed.set_footer(
+                        text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
 
                     await interaction.followup.send(embed=embed)
                 else:
