@@ -127,7 +127,7 @@ class Version(commands.Cog):
                         local_formatted_date = "unknown"
 
                     # 버전 비교
-                    if self.local_commit_hash:
+                    if self.local_commit_hash is not None:
                         is_latest = self.local_commit_hash == remote_commit_hash
                         status_emoji = "✅" if is_latest else "⚠️"
                         status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
