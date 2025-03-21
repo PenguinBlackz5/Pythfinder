@@ -12,6 +12,7 @@ import subprocess
 # .env 파일에서 환경 변수 로드
 load_dotenv()
 
+
 class Version(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -71,7 +72,8 @@ class Version(commands.Cog):
     PUBLIC_OR_NOT_CHOICES = [
         app_commands.Choice(name="True", value="True"),
         app_commands.Choice(name="False", value="False")
-        ]
+    ]
+
     @app_commands.command(name="버전", description="봇의 현재 버전과 최신 업데이트 정보를 확인합니다.")
     @app_commands.describe(public="공개 메세지 여부를 선택하세요.")
     @app_commands.choices(public=PUBLIC_OR_NOT_CHOICES)

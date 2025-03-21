@@ -1,6 +1,6 @@
 -- 필요한 테이블들을 여기에 생성합니다
 -- 예시:
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS example (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -19,4 +19,10 @@ CREATE TABLE IF NOT EXISTS attendance (
 -- channels 테이블 생성
 CREATE TABLE IF NOT EXISTS channels (
     channel_id BIGINT PRIMARY KEY
-); 
+);
+
+-- user_money 테이블 생성
+CREATE TABLE IF NOT EXISTS user_money (
+    user_id BIGINT PRIMARY KEY,
+    money INTEGER DEFAULT 0
+)

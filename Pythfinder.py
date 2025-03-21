@@ -83,17 +83,17 @@ class ConfirmView(View):
             cur = conn.cursor()
 
             # 현재 보유 금액 확인
-            cur.execute('SELECT money FROM attendance WHERE user_id = %s', (self.user_id,))
+            cur.execute('SELECT money FROM user_money WHERE user_id = %s', (self.user_id,))
             result = cur.fetchone()
             current_money = result[0] if result else 0
 
             # 출석 정보 초기화하되 보유 금액은 유지
             cur.execute('''
-                INSERT INTO attendance (user_id, last_attendance, streak, money)
-                VALUES (%s, NULL, 0, %s)
+                INSERT INTO attendance (user_id, last_attendance, streak)
+                VALUES (%s, NULL, 0)
                 ON CONFLICT (user_id) DO UPDATE 
-                SET last_attendance = NULL, streak = 0, money = %s
-            ''', (self.user_id, current_money, current_money))
+                SET last_attendance = NULL, streak = 0
+            ''', (self.user_id, ))
 
             conn.commit()
             await interaction.response.edit_message(
@@ -140,25 +140,13 @@ class MoneyResetView(View):
         try:
             cur = conn.cursor()
 
-            # 현재 출석 정보 확인
-            cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (self.user_id,))
-            result = cur.fetchone()
-
-            # 기존 출석 정보는 유지하고 돈만 0으로 설정
-            if result:
-                last_attendance = result[0]
-                streak = result[1]
-            else:
-                last_attendance = None
-                streak = 0
-
-            # INSERT OR REPLACE로 변경
+            # user_money 테이블에서 금액 초기화
             cur.execute('''
-                INSERT INTO attendance (user_id, last_attendance, streak, money)
-                VALUES (%s, %s, %s, 0)
+                INSERT INTO user_money (user_id, money)
+                VALUES (%s, 0)
                 ON CONFLICT (user_id) DO UPDATE 
-                SET last_attendance = %s, streak = %s
-            ''', (self.user_id, last_attendance, streak, last_attendance, streak))
+                SET money = 0
+            ''', (self.user_id,))
 
             conn.commit()
             await interaction.response.edit_message(
@@ -362,7 +350,7 @@ class RankingView(View):
             # 보유 금액 기준 데이터 조회
             cur.execute('''
                 SELECT user_id, money
-                FROM attendance
+                FROM user_money
                 WHERE money > 0
                 ORDER BY money DESC
             ''')
@@ -672,7 +660,7 @@ class AttendanceBot(commands.Bot):
             cur.execute('''
                 SELECT last_attendance 
                 FROM attendance 
-                WHERE user_id = %s AND DATE(last_attendance) = %s
+                WHERE user_id = %s AND last_attendance::date = %s
             ''', (user_id, today))
 
             if cur.fetchone():
@@ -682,13 +670,15 @@ class AttendanceBot(commands.Bot):
                 return
 
             # 현재 사용자 정보 확인
-            cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
-            result = cur.fetchone()
+            cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (user_id,))
+            attendance_result = cur.fetchone()
+            cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
+            money_result = cur.fetchone()
 
-            if result:
-                last_attendance = result[0]
-                current_streak = result[1]
-                current_money = result[2]
+            if attendance_result and money_result:
+                last_attendance = attendance_result[0]
+                current_streak = attendance_result[1]
+                current_money = money_result[0]
 
                 # 연속 출석 확인
                 yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -704,19 +694,25 @@ class AttendanceBot(commands.Bot):
             # 출석 순서 확인
             cur.execute('''
                 SELECT COUNT(*) FROM attendance 
-                WHERE DATE(last_attendance) = %s AND user_id != %s
+                WHERE last_attendance::date = %s AND user_id != %s
             ''', (today, user_id))
             attendance_order = cur.fetchone()[0] + 1
 
             # 출석 정보 업데이트
             cur.execute('''
-                INSERT INTO attendance (user_id, last_attendance, streak, money)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO attendance (user_id, last_attendance, streak)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (user_id) DO UPDATE 
                 SET last_attendance = %s, 
-                    streak = %s, 
-                    money = attendance.money + 10
-            ''', (user_id, today, streak, current_money + 10, today, streak))
+                    streak = %s
+            ''', (user_id, today, streak, today, streak))
+
+            cur.execute('''
+                INSERT INTO user_money (user_id, money)
+                Values (%s, %s)
+                On CONFLICT (user_id) DO UPDATE
+                SET money = user_money.money + 10
+            ''', (user_id, current_money))
 
             conn.commit()
 
@@ -752,7 +748,7 @@ class AttendanceBot(commands.Bot):
             cur.execute('''
                 SELECT last_attendance 
                 FROM attendance 
-                WHERE user_id = %s AND DATE(last_attendance) = %s
+                WHERE user_id = %s AND last_attendance::date = %s
             ''', (user_id, today))
 
             if cur.fetchone():
@@ -760,13 +756,15 @@ class AttendanceBot(commands.Bot):
                 return
 
             # 현재 사용자 정보 확인
-            cur.execute('SELECT last_attendance, streak, money FROM attendance WHERE user_id = %s', (user_id,))
-            result = cur.fetchone()
+            cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (user_id,))
+            attendance_result = cur.fetchone()
+            cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
+            money_result = cur.fetchone()
 
             if result:
-                last_attendance = result[0]
-                current_streak = result[1]
-                current_money = result[2]
+                last_attendance = attendance_result[0]
+                current_streak = attendance_result[1]
+                current_money = money_result[0]
 
                 # 연속 출석 확인
                 yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -782,19 +780,25 @@ class AttendanceBot(commands.Bot):
             # 출석 순서 확인
             cur.execute('''
                 SELECT COUNT(*) FROM attendance 
-                WHERE DATE(last_attendance) = %s AND user_id != %s
+                WHERE last_attendance::date = %s AND user_id != %s
             ''', (today, user_id))
             attendance_order = cur.fetchone()[0] + 1
 
             # 출석 정보 업데이트
             cur.execute('''
-                INSERT INTO attendance (user_id, last_attendance, streak, money)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE 
-                SET last_attendance = %s, 
-                    streak = %s, 
-                    money = attendance.money + 10
-            ''', (user_id, today, streak, current_money + 10, today, streak))
+                            INSERT INTO attendance (user_id, last_attendance, streak)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (user_id) DO UPDATE 
+                            SET last_attendance = %s, 
+                                streak = %s
+                        ''', (user_id, today, streak, today, streak))
+
+            cur.execute('''
+                            INSERT INTO user_money (user_id, money)
+                            Values (%s, %s)
+                            On CONFLICT (user_id) DO UPDATE
+                            SET money = user_money.money + 10
+                        ''', (user_id, current_money))
 
             conn.commit()
 
