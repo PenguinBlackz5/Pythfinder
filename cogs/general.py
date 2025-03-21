@@ -91,7 +91,7 @@ class General(commands.Cog):
             try:
                 cur = conn.cursor()
 
-                cur.execute('SELECT money FROM attendance WHERE user_id = %s', (user_id,))
+                cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
                 result = cur.fetchone()
 
                 if result:

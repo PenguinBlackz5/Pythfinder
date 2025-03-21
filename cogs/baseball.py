@@ -41,7 +41,7 @@ class Baseball(commands.Cog):
                 user_id = interaction.user.id
 
                 # 현재 보유 금액 확인
-                cur.execute('SELECT money FROM attendance WHERE user_id = %s', (user_id,))
+                cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
                 result = cur.fetchone()
                 if result:
                     current_money = result[0]
@@ -53,7 +53,7 @@ class Baseball(commands.Cog):
                 print(type(bet_amount))
                 # 베팅금 차감
                 cur.execute('''
-                    UPDATE attendance 
+                    UPDATE user_money 
                     SET money = %s 
                     WHERE user_id = %s
                 ''', (current_money - bet_amount, user_id))
@@ -120,8 +120,8 @@ class Baseball(commands.Cog):
                             try:
                                 cur = conn.cursor()
                                 cur.execute('''
-                                    UPDATE attendance 
-                                    SET money = money + %s 
+                                    UPDATE user_money 
+                                    SET money = user_money.money + %s 
                                     WHERE user_id = %s
                                 ''', (winnings, interaction.user.id))
                                 conn.commit()
