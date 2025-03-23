@@ -16,6 +16,7 @@ class RPSGameView(discord.ui.View):
         self.interaction = interaction
         self.bet_amount = bet_amount
         self.choices = {}
+        self.game_message = None
 
     @discord.ui.button(label="가위 ✌️", style=discord.ButtonStyle.primary)
     async def choose_scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -57,7 +58,9 @@ class RPSGameView(discord.ui.View):
 
         result = self.determine_winner(self.challenger, challenger_choice, self.opponent, opponent_choice, self.bet_amount)
 
-        await self.interaction.followup.send(result)
+        self.game_message = await self.interaction.followup.send(result)
+
+        await self.game_message.delete(delay=10)
 
     def determine_winner(self, player1, choice1, player2, choice2, bet_amount: int):
         outcomes = {"가위": "보", "바위": "가위", "보": "바위"}
@@ -134,6 +137,9 @@ class JoinGameButton(discord.ui.Button):
             )
             await interaction.response.send_message(embed=error_embed, ephemeral=True)
             return
+
+        self.disabled = True
+        self.view.stop()
 
         self.opponent = interaction.user
         await interaction.response.send_message(f"{self.challenger.mention} vs {self.opponent.mention}! 게임이 시작됩니다!",
