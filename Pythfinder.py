@@ -137,7 +137,7 @@ class ResetAttendanceView(View):
         self.value = None
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction):
+    async def confirm(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         self.value = True
@@ -156,7 +156,7 @@ class ResetAttendanceView(View):
             await interaction.response.send_message("❌ 출석 정보 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction):
+    async def cancel(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         self.value = False
@@ -171,7 +171,7 @@ class ResetMoneyView(View):
         self.value = None
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction):
+    async def confirm(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         self.value = True
@@ -190,7 +190,7 @@ class ResetMoneyView(View):
             await interaction.response.send_message("❌ 잔고 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction):
+    async def cancel(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         self.value = False
@@ -207,7 +207,7 @@ class ClearAllView(View):
         self.value = None
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction):
+    async def confirm(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         self.value = True
@@ -273,7 +273,7 @@ class ClearAllView(View):
             conn.close()
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.gray)
-    async def cancel(self, interaction: discord.Interaction):
+    async def cancel(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         self.value = False
@@ -287,7 +287,7 @@ class RankingView(View):
         self.user_id = user_id
 
     @discord.ui.button(label="1️⃣ 출석 랭킹", style=discord.ButtonStyle.primary)
-    async def attendance_ranking(self, interaction: discord.Interaction):
+    async def attendance_ranking(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         conn = get_db_connection()
@@ -357,7 +357,7 @@ class RankingView(View):
             conn.close()
 
     @discord.ui.button(label="2️⃣ 보유 금액 랭킹", style=discord.ButtonStyle.primary)
-    async def money_ranking(self, interaction: discord.Interaction):
+    async def money_ranking(self, interaction: discord.Interaction, button: Button):
         await check_user_interaction(interaction)
 
         conn = get_db_connection()
