@@ -1,11 +1,9 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
-import psycopg2
 from psycopg2 import Error
 from datetime import datetime, timedelta
 import pytz
-from discord.ui import Button, View
+from discord.ui import View
 import os
 # 웹 서버를 위한 추가 import
 from flask import Flask
@@ -14,7 +12,8 @@ from dotenv import load_dotenv
 import requests  # 새로 추가
 import time  # 새로 추가
 import sys
-import asyncio
+
+from database_manager import get_db_connection
 
 # 환경변수 로드
 load_dotenv()
@@ -49,124 +48,154 @@ def is_admin_or_developer(interaction: discord.Interaction) -> bool:
     )
 
 
-# 데이터베이스 연결 함수
-def get_db_connection():
+async def check_user_interaction(interaction: discord.Interaction) -> bool:
+    """버튼을 클릭한 사용자가 권한이 있는지 확인합니다.
+    이후 확인 결과 bool을 반환합니다."""
+    if interaction.user.id != self.user_id:
+        interaction.response.send_message("❌ 본인만 선택할 수 있습니다!", ephemeral=True)
+        return False
+    return True
+
+
+def update_balance(user_id: int, amount: int) -> bool:
+    """user_id의 잔고를 amount만큼 업데이트합니다. (amount 양수, 음수 입력시 증감)
+    이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
+    이후 업데이트 정상 작동 여부 bool을 반환합니다."""
+    conn = get_db_connection()
+    if not conn:
+        return False
     try:
-        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
-        return conn
+        cur = conn.cursor()
+        cur.execute('SElECT money FROM  user_money WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
+        if not result or result[0] < -amount:
+            # 잔액 부족
+            return False
+        cur.execute('UPDATE user_money SET money = user_money.money + %s WHERE user_id = %s', (amount, user_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"잔액 업데이트 오류: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def reset_attendance(user_id: int) -> bool:
+    """user_id의 출석 정보를 초기화합니다. (attendance 테이블의 모든 열)
+    이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
+    이후 출석 초기화 정상 작동 여부 bool을 반환합니다."""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO attendance (user_id, last_attendance, streak)
+            VALUES (%s, NULL, 0)
+            ON CONFLICT (user_id) DO UPDATE 
+            SET last_attendance = NULL, streak = 0
+        ''', (user_id,))
+        conn.commit()
+        return True
     except Error as e:
-        print(f"데이터베이스 연결 오류: {e}")
-        return None
+        print(f"출석 정보 초기화를 위한 데이터베이스 조회중 오류: {e}")
+        return False
+    finally:
+        conn.close()
 
 
-class ConfirmView(View):
+def reset_money(user_id: int) -> bool:
+    """user_id의 잔고를 초기화합니다. (user_money 테이블의 money 열)
+        이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
+        이후 잔고 초기화 정상 작동 여부 bool을 반환합니다."""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        # user_money 테이블에서 금액 초기화
+        cur.execute('''
+            INSERT INTO user_money (user_id, money)
+            VALUES (%s, 0)
+            ON CONFLICT (user_id) DO UPDATE 
+            SET money = 0
+        ''', (user_id,))
+        conn.commit()
+        return True
+    except Error as e:
+        print(f"잔고 초기화를 위한 데이터베이스 조회중 오류: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+class ResetAttendanceView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)  # 60초 후 버튼 비활성화
         self.user_id = user_id
         self.value = None
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def confirm(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         self.value = True
         self.stop()
 
-        conn = get_db_connection()
-        if not conn:
-            await interaction.response.send_message("데이터베이스 연결 오류가 발생했습니다.", ephemeral=True)
-            return
-
         try:
-            cur = conn.cursor()
-
-            # 현재 보유 금액 확인
-            cur.execute('SELECT money FROM user_money WHERE user_id = %s', (self.user_id,))
-            result = cur.fetchone()
-            current_money = result[0] if result else 0
-
-            # 출석 정보 초기화하되 보유 금액은 유지
-            cur.execute('''
-                INSERT INTO attendance (user_id, last_attendance, streak)
-                VALUES (%s, NULL, 0)
-                ON CONFLICT (user_id) DO UPDATE 
-                SET last_attendance = NULL, streak = 0
-            ''', (self.user_id, ))
-
-            conn.commit()
-            await interaction.response.edit_message(
-                content="출석 정보가 초기화되었습니다.\n💰 보유 금액은 유지됩니다.",
-                view=None
-            )
+            if not reset_attendance(user_id):
+                return
+            else:
+                await interaction.response.edit_message(
+                    content="출석 정보가 초기화되었습니다.\n💰 보유 금액은 유지됩니다.",
+                    view=None
+                )
         except Error as e:
-            print(f"데이터베이스 오류: {e}")
-            await interaction.response.send_message("오류가 발생했습니다.", ephemeral=True)
-        finally:
-            conn.close()
+            print(f"출석 정보 초기화 중 오류 발생: {e}")
+            await interaction.response.send_message("❌ 출석 정보 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def cancel(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         self.value = False
         self.stop()
         await interaction.response.edit_message(content="출석 초기화가 취소되었습니다.", view=None)
 
 
-class MoneyResetView(View):
+class ResetMoneyView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
         self.user_id = user_id
         self.value = None
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def confirm(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         self.value = True
         self.stop()
 
-        conn = get_db_connection()
-        if not conn:
-            await interaction.response.send_message("데이터베이스 연결 오류가 발생했습니다.", ephemeral=True)
-            return
-
         try:
-            cur = conn.cursor()
-
-            # user_money 테이블에서 금액 초기화
-            cur.execute('''
-                INSERT INTO user_money (user_id, money)
-                VALUES (%s, 0)
-                ON CONFLICT (user_id) DO UPDATE 
-                SET money = 0
-            ''', (self.user_id,))
-
-            conn.commit()
-            await interaction.response.edit_message(
-                content="💰 보유 금액이 0원으로 초기화되었습니다.",
-                view=None
-            )
+            if not reset_money(user_id):
+                return
+            else:
+                await interaction.response.edit_message(
+                    content="💰 보유 금액이 0원으로 초기화되었습니다.",
+                    view=None
+                )
         except Error as e:
             print(f"데이터베이스 오류: {e}")
-            await interaction.response.send_message("오류가 발생했습니다.", ephemeral=True)
-        finally:
-            conn.close()
+            await interaction.response.send_message("❌ 잔고 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def cancel(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         self.value = False
         self.stop()
+
         await interaction.response.edit_message(content="통장 초기화가 취소되었습니다.", view=None)
 
 
@@ -178,10 +207,8 @@ class ClearAllView(View):
         self.value = None
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def confirm(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         self.value = True
         self.stop()
@@ -246,10 +273,8 @@ class ClearAllView(View):
             conn.close()
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.gray)
-    async def cancel(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def cancel(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         self.value = False
         self.stop()
@@ -262,10 +287,8 @@ class RankingView(View):
         self.user_id = user_id
 
     @discord.ui.button(label="1️⃣ 출석 랭킹", style=discord.ButtonStyle.primary)
-    async def attendance_ranking(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def attendance_ranking(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         conn = get_db_connection()
         if not conn:
@@ -334,10 +357,8 @@ class RankingView(View):
             conn.close()
 
     @discord.ui.button(label="2️⃣ 보유 금액 랭킹", style=discord.ButtonStyle.primary)
-    async def money_ranking(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("본인만 선택할 수 있습니다!", ephemeral=True)
-            return
+    async def money_ranking(self, interaction: discord.Interaction):
+        await check_user_interaction(interaction)
 
         conn = get_db_connection()
         if not conn:
@@ -497,16 +518,19 @@ class AttendanceBot(commands.Bot):
     async def setup_hook(self):
         print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
         print("\n=== cog 파일 로드 시작 ===", flush=True)
+
         # cogs 폴더에 있는 모든 .py 파일을 불러옴
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py"):
                 await self.load_extension(f"cogs.{filename[:-3]}")
                 print(f"✅ {filename} 로드 완료")
+
         # 슬래시 명령어 동기화
         try:
             print("슬래시 명령어 동기화 시작...", flush=True)
             synced = await self.tree.sync()
             print(f"동기화된 슬래시 명령어: {len(synced)}개", flush=True)
+
             # 동기화된 명령어 목록 출력
             for cmd in synced:
                 print(f"- {cmd.name}", flush=True)
@@ -820,6 +844,7 @@ class AttendanceBot(commands.Bot):
 
 
 bot = AttendanceBot()
+
 
 def keep_alive():
     """15분마다 자체 서버에 핑을 보내 슬립모드 방지"""

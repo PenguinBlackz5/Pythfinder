@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-from Pythfinder import is_admin_or_developer, get_db_connection, DEVELOPER_IDS
+from Pythfinder import is_admin_or_developer, DEVELOPER_IDS
+from database_manager import get_db_connection
 
 
 def fetch_all_data(table_name):
@@ -33,6 +34,7 @@ def fetch_all_data(table_name):
     finally:
         conn.close()  # 연결 종료
 
+
 class TableNameTransformer(app_commands.Transformer):
     async def transform(self, interaction: discord.Interaction, table_name: str) -> str:
         """사용자가 선택한 테이블 이름을 반환"""
@@ -45,6 +47,7 @@ class TableNameTransformer(app_commands.Transformer):
             app_commands.Choice(name=table, value=table)
             for table in tables if current.lower() in table.lower()
         ]
+
 
 def get_table_list():
     """PostgreSQL 데이터베이스에서 테이블 목록을 가져오는 함수"""
@@ -125,7 +128,6 @@ class Database(commands.Cog):
                 )
             finally:
                 conn.close()
-
 
         @bot.tree.command(name="디비구조", description="데이터베이스의 테이블 구조와 현황을 확인합니다. (개발자 전용)")
         async def check_db_structure(interaction: discord.Interaction):
@@ -238,10 +240,10 @@ class Database(commands.Cog):
             finally:
                 conn.close()
 
-
         @bot.tree.command(name="디비조회", description="데이터베이스의 테이블 내용을 조회합니다. (개발자 전용)")
         @app_commands.describe(table_name="조회할 테이블을 선택하세요.")
-        async def show_table(interaction: discord.Interaction, table_name: app_commands.Transform[str, TableNameTransformer]):
+        async def show_table(interaction: discord.Interaction,
+                             table_name: app_commands.Transform[str, TableNameTransformer]):
             """사용자가 입력한 테이블의 모든 컬럼 내용을 출력"""
 
             # 개발자 권한 확인

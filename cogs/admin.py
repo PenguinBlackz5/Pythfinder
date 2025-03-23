@@ -3,11 +3,12 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime
 
-from Pythfinder import DEVELOPER_IDS, get_db_connection, KST, RankingView, ClearAllView, is_admin_or_developer
+from Pythfinder import DEVELOPER_IDS, KST, RankingView, ClearAllView, is_admin_or_developer
+from database_manager import get_db_connection
 
 
-class admin(commands.Cog):
-    def __init__(self, bot:commands.Bot):
+class Admin(commands.Cog):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
         @bot.tree.command(name="출석채널", description="출석을 인식할 채널을 지정합니다.")
@@ -294,5 +295,6 @@ class admin(commands.Cog):
                     ephemeral=True
                 )
 
-async def setup(bot:commands.Bot):
-    await bot.add_cog(admin(bot))
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Admin(bot))

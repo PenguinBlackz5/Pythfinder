@@ -1,4 +1,4 @@
-from database import execute_query
+from database_manager import execute_query
 
 
 def init_database():
