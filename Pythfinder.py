@@ -62,6 +62,7 @@ def update_balance(user_id: int, amount: int) -> bool:
     이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
     이후 업데이트 정상 작동 여부 bool을 반환합니다."""
     conn = get_db_connection()
+
     if not conn:
         return False
     try:
@@ -79,6 +80,7 @@ def update_balance(user_id: int, amount: int) -> bool:
         print(f"잔액 업데이트 오류: {e}")
         return False
     finally:
+        print("통장 잔고 업데이트를 위한 커넥션을 닫습니다.")
         conn.close()
 
 

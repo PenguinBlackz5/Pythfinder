@@ -36,19 +36,11 @@ class RPSGameView(discord.ui.View):
             return
 
         self.choices[interaction.user] = choice
-        await interaction.response.send_message(f"{choice}를 선택했습니다!", ephemeral=True)
 
         # 상대방에게 선택을 완료했다고 알리기 위해 메시지 수정
-        if interaction.user == self.challenger:
-            # challenger가 선택을 완료했을 때
-            await self.interaction.edit_original_response(
-                content=f"{self.challenger.mention}님이 선택을 완료했습니다! 상대방의 선택을 기다리고 있습니다.")
-        else:
-            # opponent가 선택을 완료했을 때
-            await self.interaction.edit_original_response(
-                content=f"{self.opponent.mention}님이 선택을 완료했습니다! 상대방의 선택을 기다리고 있습니다.")
-
-        if len(self.choices) == 2:
+        if len(self.choices) == 1:
+            await self.interaction.channel.send(content=f"{interaction.user.mention}님이 선택을 완료했습니다! 상대방을 기다리는 중...")
+        elif len(self.choices) == 2:
             await self.resolve_game()
 
     async def resolve_game(self):
@@ -58,25 +50,21 @@ class RPSGameView(discord.ui.View):
 
         result = self.determine_winner(self.challenger, challenger_choice, self.opponent, opponent_choice, self.bet_amount)
 
-        self.game_message = await self.interaction.followup.send(result)
+        self.game_message = await self.interaction.channel.send(result)
 
-        await self.game_message.delete(delay=10)
+        await self.message.delete(delay=1)
 
     def determine_winner(self, player1, choice1, player2, choice2, bet_amount: int):
         outcomes = {"가위": "보", "바위": "가위", "보": "바위"}
         if choice1 == choice2:
             update_balance(self.bot.user.id, bet_amount * 2)
-            update_balance(player1.id, -bet_amount)
-            update_balance(player2.id, -bet_amount)
             return f"{player1.mention}({choice1}) vs {player2.mention}({choice2}) - 무승부! 두 분의 베팅금 {bet_amount}원은 봇의 통장으로 들어갑니다."
         elif outcomes[choice1] == choice2:
-            update_balance(player1.id, bet_amount)
-            update_balance(player2.id, -bet_amount)
+            update_balance(player1.id, bet_amount * 2)
             return (f"{player1.mention}({choice1})가 {player2.mention}({choice2})를 이겼습니다!"
                     f"{player1.mention}님이 {player2.mention}님의 {bet_amount}원을 획득하셨습니다.")
         else:
-            update_balance(player2.id, bet_amount)
-            update_balance(player1.id, -bet_amount)
+            update_balance(player2.id, bet_amount * 2)
             return (f"{player2.mention}({choice2})가 {player1.mention}({choice1})를 이겼습니다!"
                     f"{player2.mention}님이 {player1.mention}님의 {bet_amount}원을 획득하셨습니다.")
 
@@ -138,15 +126,13 @@ class JoinGameButton(discord.ui.Button):
             await interaction.response.send_message(embed=error_embed, ephemeral=True)
             return
 
-        self.disabled = True
-        self.view.stop()
-
         self.opponent = interaction.user
-        await interaction.response.send_message(f"{self.challenger.mention} vs {self.opponent.mention}! 게임이 시작됩니다!",
-                                                ephemeral=False)
+        await interaction.channel.send(f"{self.challenger.mention} vs {self.opponent.mention}! 게임이 시작됩니다!")
         view = RPSGameView(self.bot, self.challenger, self.opponent, self.interaction, self.bet_amount)
-        await interaction.followup.send(
+        await interaction.channel.send(
             f"{self.challenger.mention} vs {self.opponent.mention}! 아래 버튼을 눌러 선택하세요!", view=view)
+
+        await interaction.response.defer(ephemeral=True)
 
     @view.setter
     def view(self, value):
@@ -187,9 +173,10 @@ class RockPaperScissors(commands.Cog):
 
             view = RockPaperScissorsView(self.bot, interaction.user, interaction, bet_amount)
 
-            await interaction.response.send_message(
+            await interaction.channel.send(
                 f"{interaction.user.mention}님이 {bet_amount}원을 걸고 가위바위보 상대를 찾고 있습니다! 참가하려면 버튼을 눌러주세요.", view=view)
 
+            await interaction.response.defer(ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(RockPaperScissors(bot))
