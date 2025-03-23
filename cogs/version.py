@@ -162,20 +162,46 @@ class Version(commands.Cog):
                     )
 
                     embed.set_footer(
-                        text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+                        text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
 
                     await interaction.followup.send(embed=embed)
                 else:
-                    await interaction.followup.send("저장소에서 커밋 정보를 찾을 수 없습니다.")
+                    error_embed = discord.Embed(
+                        title="❌ 오류",
+                        description="저장소에서 커밋 정보를 찾을 수 없습니다.",
+                        color=0xff0000
+                    )
+                    await interaction.followup.send(embed=error_embed)
             elif response.status_code == 401:
-                await interaction.followup.send("GitHub API 인증 실패: 토큰이 유효하지 않거나 권한이 부족합니다.")
+                error_embed = discord.Embed(
+                    title="❌ 인증 오류",
+                    description="GitHub API 인증 실패: 토큰이 유효하지 않거나 권한이 부족합니다.",
+                    color=0xff0000
+                )
+                await interaction.followup.send(embed=error_embed)
             elif response.status_code == 404:
-                await interaction.followup.send("GitHub API 요청 실패: 리포지토리를 찾을 수 없거나 접근 권한이 없습니다.")
+                error_embed = discord.Embed(
+                    title="❌ 리포지토리 오류",
+                    description="GitHub API 요청 실패: 리포지토리를 찾을 수 없거나 접근 권한이 없습니다.",
+                    color=0xff0000
+                )
+                await interaction.followup.send(embed=error_embed)
             else:
-                await interaction.followup.send(f"GitHub API 요청 실패: {response.status_code}")
+                error_embed = discord.Embed(
+                    title="❌ API 오류",
+                    description=f"GitHub API 요청 실패: {response.status_code}",
+                    color=0xff0000
+                )
+                await interaction.followup.send(embed=error_embed)
 
         except Exception as e:
-            await interaction.followup.send(f"오류 발생: {str(e)}")
+            error_embed = discord.Embed(
+                title="❌ 예외 오류",
+                description=f"오류 발생: {str(e)}",
+                color=0xff0000
+            )
+            await interaction.followup.send(embed=error_embed)
 
 
 async def setup(bot):

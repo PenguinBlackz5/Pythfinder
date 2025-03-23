@@ -73,14 +73,24 @@ class Database(commands.Cog):
         @app_commands.default_permissions(administrator=True)
         async def test_db(interaction: discord.Interaction):
             if not is_admin_or_developer(interaction):
-                await interaction.response.send_message("이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="❌ 권한 오류",
+                    description="이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
 
             print(f"디비테스트 명령어 실행 - 요청자: {interaction.user.name}", flush=True)
 
             conn = get_db_connection()
             if not conn:
-                await interaction.response.send_message("❌ 데이터베이스 연결 실패!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="❌ 데이터베이스 오류",
+                    description="데이터베이스 연결 실패!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
 
             try:
@@ -110,22 +120,31 @@ class Database(commands.Cog):
                 cur.execute("SELECT COUNT(*) FROM channels")
                 channels_count = cur.fetchone()[0]
 
-                status_message = (
-                    "✅ 데이터베이스 연결 테스트 결과\n\n"
-                    f"attendance 테이블: {'존재함' if attendance_exists else '없음'}\n"
-                    f"channels 테이블: {'존재함' if channels_exists else '없음'}\n"
-                    f"attendance 레코드 수: {attendance_count}\n"
-                    f"channels 레코드 수: {channels_count}"
+                embed = discord.Embed(
+                    title="✅ 데이터베이스 연결 테스트 결과",
+                    color=0x00ff00
+                )
+                embed.add_field(
+                    name="attendance 테이블",
+                    value=f"존재함: {'✅' if attendance_exists else '❌'}\n레코드 수: {attendance_count}",
+                    inline=True
+                )
+                embed.add_field(
+                    name="channels 테이블",
+                    value=f"존재함: {'✅' if channels_exists else '❌'}\n레코드 수: {channels_count}",
+                    inline=True
                 )
 
-                await interaction.response.send_message(status_message, ephemeral=True)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
 
             except Exception as e:
-                print(f"디비테스트 실행 중 오류: {e}", flush=True)  # 디버깅 로그 추가
-                await interaction.response.send_message(
-                    f"❌ 데이터베이스 쿼리 실행 중 오류 발생:\n{str(e)}",
-                    ephemeral=True
+                print(f"디비테스트 실행 중 오류: {e}", flush=True)
+                error_embed = discord.Embed(
+                    title="❌ 오류",
+                    description=f"데이터베이스 쿼리 실행 중 오류 발생:\n```{str(e)}```",
+                    color=0xff0000
                 )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
             finally:
                 conn.close()
 
@@ -133,14 +152,24 @@ class Database(commands.Cog):
         async def check_db_structure(interaction: discord.Interaction):
             # 개발자 권한 확인
             if interaction.user.id not in DEVELOPER_IDS:
-                await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="⚠️ 권한 오류",
+                    description="이 명령어는 개발자만 사용할 수 있습니다!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
 
             await interaction.response.defer(ephemeral=True)
 
             conn = get_db_connection()
             if not conn:
-                await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="❌ 데이터베이스 오류",
+                    description="데이터베이스 연결 실패!",
+                    color=0xff0000
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
                 return
 
             try:
@@ -191,52 +220,67 @@ class Database(commands.Cog):
                 else:
                     current_guild_count = 0
 
-                # 메시지 구성
-                message = "📊 **데이터베이스 구조 및 현황**\n\n"
+                embed = discord.Embed(
+                    title="📊 데이터베이스 구조 및 현황",
+                    color=0x00ff00
+                )
 
                 # attendance 테이블 정보
-                message += "**📝 attendance 테이블**\n"
-                message += "```\n"
-                message += "컬럼명         타입      기본값    Null허용\n"
-                message += "----------------------------------------\n"
+                attendance_text = "```\n"
+                attendance_text += "컬럼명         타입      기본값    Null허용\n"
+                attendance_text += "----------------------------------------\n"
                 for col in attendance_columns:
-                    message += f"{col[0]:<12} {col[1]:<8} {str(col[2]):<8} {col[3]:<6}\n"
-                message += "```\n"
-                message += f"총 레코드 수: {attendance_count}개\n"
-                if current_guild:
-                    message += f"현재 서버 레코드 수: {current_guild_count}개\n"
-                message += "\n"
+                    attendance_text += f"{col[0]:<12} {col[1]:<8} {str(col[2]):<8} {col[3]:<6}\n"
+                attendance_text += "```"
+                embed.add_field(
+                    name="📝 attendance 테이블",
+                    value=f"{attendance_text}\n총 레코드 수: {attendance_count}개\n"
+                          f"{f'현재 서버 레코드 수: {current_guild_count}개' if current_guild else ''}",
+                    inline=False
+                )
 
                 # channels 테이블 정보
-                message += "**🔧 channels 테이블**\n"
-                message += "```\n"
-                message += "컬럼명         타입      기본값    Null허용\n"
-                message += "----------------------------------------\n"
+                channels_text = "```\n"
+                channels_text += "컬럼명         타입      기본값    Null허용\n"
+                channels_text += "----------------------------------------\n"
                 for col in channels_columns:
-                    message += f"{col[0]:<12} {col[1]:<8} {str(col[2]):<8} {col[3]:<6}\n"
-                message += "```\n"
-                message += f"총 레코드 수: {channels_count}개\n\n"
+                    channels_text += f"{col[0]:<12} {col[1]:<8} {str(col[2]):<8} {col[3]:<6}\n"
+                channels_text += "```"
+                embed.add_field(
+                    name="🔧 channels 테이블",
+                    value=f"{channels_text}\n총 레코드 수: {channels_count}개",
+                    inline=False
+                )
 
                 # 출석 채널 목록
                 if channels_count > 0:
                     cur.execute("SELECT channel_id FROM channels")
                     channel_ids = cur.fetchall()
-                    message += "**📍 등록된 출석 채널**\n"
+                    channel_list = []
                     for (channel_id,) in channel_ids:
                         channel = bot.get_channel(channel_id)
                         if channel:
-                            message += f"- {channel.guild.name} / #{channel.name}\n"
+                            channel_list.append(f"- {channel.guild.name} / #{channel.name}")
                         else:
-                            message += f"- 알 수 없는 채널 (ID: {channel_id})\n"
+                            channel_list.append(f"- 알 수 없는 채널 (ID: {channel_id})")
+                    
+                    if channel_list:
+                        embed.add_field(
+                            name="📍 등록된 출석 채널",
+                            value="\n".join(channel_list),
+                            inline=False
+                        )
 
-                await interaction.followup.send(message, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
             except Exception as e:
                 print(f"데이터베이스 구조 조회 중 오류 발생: {e}", flush=True)
-                await interaction.followup.send(
-                    f"❌ 데이터베이스 조회 중 오류가 발생했습니다.\n```{str(e)}```",
-                    ephemeral=True
+                error_embed = discord.Embed(
+                    title="❌ 오류",
+                    description=f"데이터베이스 조회 중 오류가 발생했습니다.\n```{str(e)}```",
+                    color=0xff0000
                 )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
             finally:
                 conn.close()
 
@@ -248,7 +292,12 @@ class Database(commands.Cog):
 
             # 개발자 권한 확인
             if interaction.user.id not in DEVELOPER_IDS:
-                await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="⚠️ 권한 오류",
+                    description="이 명령어는 개발자만 사용할 수 있습니다!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
 
             await interaction.response.defer(ephemeral=True)

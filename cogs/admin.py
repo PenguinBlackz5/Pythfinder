@@ -17,12 +17,22 @@ class Admin(commands.Cog):
         async def set_attendance_channel(interaction: discord.Interaction):
             # 관리자 또는 개발자 권한 확인
             if not is_admin_or_developer(interaction):
-                await interaction.response.send_message("이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="❌ 권한 오류",
+                    description="이 명령어는 서버 관리자와 개발자만 사용할 수 있습니다!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
 
             # DM 채널에서 실행 방지
             if isinstance(interaction.channel, discord.DMChannel):
-                await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="❌ 채널 오류",
+                    description="이 명령어는 서버에서만 사용할 수 있습니다!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
 
             channel_id = interaction.channel_id
@@ -41,7 +51,12 @@ class Admin(commands.Cog):
             if not conn:
                 print("데이터베이스 연결 실패", flush=True)
                 try:
-                    await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="❌ 데이터베이스 오류",
+                        description="데이터베이스 연결 실패!",
+                        color=0xff0000
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
                 return
@@ -72,18 +87,25 @@ class Admin(commands.Cog):
                     bot.attendance_channels = set()  # 빈 집합으로 초기화
 
                 try:
-                    await interaction.followup.send(
-                        f"✅ 이 채널이 출석 채널로 지정되었습니다!\n"
-                        f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
-                        ephemeral=True
+                    success_embed = discord.Embed(
+                        title="✅ 출석 채널 설정 완료",
+                        description=f"이 채널이 출석 채널로 지정되었습니다!\n"
+                                  f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
+                        color=0x00ff00
                     )
+                    await interaction.followup.send(embed=success_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
 
             except Exception as e:
                 print(f"채널 등록 중 오류 발생: {e}", flush=True)
                 try:
-                    await interaction.followup.send("채널 등록 중 오류가 발생했습니다.", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="❌ 오류",
+                        description="채널 등록 중 오류가 발생했습니다.",
+                        color=0xff0000
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
             finally:
@@ -95,7 +117,12 @@ class Admin(commands.Cog):
             # 개발자 권한 확인
             if interaction.user.id not in DEVELOPER_IDS:
                 try:
-                    await interaction.response.send_message("⚠️ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="⚠️ 권한 오류",
+                        description="이 명령어는 개발자만 사용할 수 있습니다!",
+                        color=0xff0000
+                    )
+                    await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
                 return
@@ -103,7 +130,12 @@ class Admin(commands.Cog):
             # DM에서 실행 방지
             if not interaction.guild:
                 try:
-                    await interaction.response.send_message("이 명령어는 서버에서만 사용할 수 있습니다!", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="❌ 채널 오류",
+                        description="이 명령어는 서버에서만 사용할 수 있습니다!",
+                        color=0xff0000
+                    )
+                    await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
                 return
@@ -121,7 +153,12 @@ class Admin(commands.Cog):
                 conn = get_db_connection()
                 if not conn:
                     try:
-                        await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+                        error_embed = discord.Embed(
+                            title="❌ 데이터베이스 오류",
+                            description="데이터베이스 연결 실패!",
+                            color=0xff0000
+                        )
+                        await interaction.followup.send(embed=error_embed, ephemeral=True)
                     except discord.NotFound:
                         print("상호작용이 만료되었습니다.", flush=True)
                     return
@@ -137,7 +174,12 @@ class Admin(commands.Cog):
 
                 if not member_ids:
                     try:
-                        await interaction.followup.send("서버에 멤버가 없습니다.", ephemeral=True)
+                        error_embed = discord.Embed(
+                            title="❌ 오류",
+                            description="서버에 멤버가 없습니다.",
+                            color=0xff0000
+                        )
+                        await interaction.followup.send(embed=error_embed, ephemeral=True)
                     except discord.NotFound:
                         print("상호작용이 만료되었습니다.", flush=True)
                     return
@@ -173,19 +215,21 @@ class Admin(commands.Cog):
                 total_money = sum(r[1] for r in user_money_results if r[1])
 
                 # 메시지 구성
-                message = f"📊 **{guild.name} 서버 출석 현황**\n\n"
+                embed = discord.Embed(
+                    title=f"📊 {guild.name} 서버 출석 현황",
+                    color=0x00ff00
+                )
 
                 # 통계 정보
-                message += "**📈 통계**\n"
-                message += f"등록 멤버: {registered_members}명\n"
-                message += f"오늘 출석: {today_attendance}명\n"
-                message += f"전체 보유 금액: {total_money}원\n\n"
+                stats_text = f"등록 멤버: {registered_members}명\n"
+                stats_text += f"오늘 출석: {today_attendance}명\n"
+                stats_text += f"전체 보유 금액: {total_money:,}원"
+                embed.add_field(name="📈 통계", value=stats_text, inline=False)
 
                 # 멤버별 상세 정보
-                message += "**👥 멤버별 현황**\n"
-                message += "```\n"
-                message += "닉네임         연속출석  마지막출석    보유금액\n"
-                message += "------------------------------------------------\n"
+                member_text = "```\n"
+                member_text += "닉네임         연속출석  마지막출석    보유금액\n"
+                member_text += "------------------------------------------------\n"
 
                 user_money_dict = {user_id: money for user_id, money in user_money_results}
 
@@ -196,37 +240,27 @@ class Admin(commands.Cog):
                             member.display_name) > 10 else member.display_name.ljust(10)
                         last_date = last_attendance.strftime('%Y-%m-%d') if last_attendance else "없음"
                         streak = streak or 0
-                        money = user_money_dict.get(user_id, 0)  # user_money_results에서 해당 user_id의 money 값을 가져옴
+                        money = user_money_dict.get(user_id, 0)
 
-                        message += f"{name:<13} {streak:<8} {last_date:<12} {money:>6}원\n"
+                        member_text += f"{name:<13} {streak:<8} {last_date:<12} {money:>6}원\n"
 
-                message += "```\n"
+                member_text += "```"
+                embed.add_field(name="👥 멤버별 현황", value=member_text, inline=False)
 
-                # 메시지가 너무 길 경우 분할 전송
-                if len(message) > 2000:
-                    parts = [message[i:i + 1990] for i in range(0, len(message), 1990)]
-                    for i, part in enumerate(parts):
-                        try:
-                            if i == 0:
-                                await interaction.followup.send(part, ephemeral=True)
-                            else:
-                                await interaction.followup.send(part, ephemeral=True)
-                        except discord.NotFound:
-                            print("상호작용이 만료되었습니다.", flush=True)
-                            return
-                else:
-                    try:
-                        await interaction.followup.send(message, ephemeral=True)
-                    except discord.NotFound:
-                        print("상호작용이 만료되었습니다.", flush=True)
+                try:
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                except discord.NotFound:
+                    print("상호작용이 만료되었습니다.", flush=True)
 
             except Exception as e:
                 print(f"출석 현황 조회 중 오류 발생: {e}", flush=True)
                 try:
-                    await interaction.followup.send(
-                        f"❌ 출석 현황 조회 중 오류가 발생했습니다.\n```{str(e)}```",
-                        ephemeral=True
+                    error_embed = discord.Embed(
+                        title="❌ 오류",
+                        description=f"출석 현황 조회 중 오류가 발생했습니다.\n```{str(e)}```",
+                        color=0xff0000
                     )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
             finally:
@@ -236,13 +270,14 @@ class Admin(commands.Cog):
         @bot.tree.command(name="랭킹", description="서버의 출석/보유금액 랭킹을 확인합니다.")
         async def check_ranking(interaction: discord.Interaction):
             view = RankingView(interaction.user.id)
-            await interaction.response.send_message(
-                "📊 **확인하고 싶은 랭킹을 선택해주세요!**\n\n"
-                "1️⃣ 출석 랭킹: 연속 출석 일수 기준 TOP 10\n"
-                "2️⃣ 보유 금액 랭킹: 보유 금액 기준 TOP 10",
-                view=view,
-                ephemeral=True
+            embed = discord.Embed(
+                title="📊 랭킹 확인",
+                description="확인하고 싶은 랭킹을 선택해주세요!\n\n"
+                          "1️⃣ 출석 랭킹: 연속 출석 일수 기준 TOP 10\n"
+                          "2️⃣ 보유 금액 랭킹: 보유 금액 기준 TOP 10",
+                color=0x00ff00
             )
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         @bot.tree.command(name="클리어올캐시", description="⚠️ 이 서버의 모든 출석 데이터를 초기화합니다. (개발자 전용)")
         async def clear_all_cache(interaction: discord.Interaction):

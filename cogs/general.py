@@ -23,7 +23,12 @@ class General(commands.Cog):
 
                 conn = get_db_connection()
                 if not conn:
-                    await interaction.followup.send("데이터베이스 연결 실패!", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="❌ 데이터베이스 오류",
+                        description="데이터베이스 연결 실패!",
+                        color=0xff0000
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
                     return
 
                 c = conn.cursor()
@@ -51,29 +56,40 @@ class General(commands.Cog):
                         minutes = int((time_left.total_seconds() % 3600) // 60)
                         time_left_str = f"{hours}시간 {minutes}분"
 
-                    await interaction.followup.send(
-                        f"📊 출석 현황\n"
-                        f"오늘 출석: {status}\n"
-                        f"연속 출석: {streak}일\n"
-                        f"다음 출석까지: {time_left_str}",
-                        ephemeral=True
+                    embed = discord.Embed(
+                        title="📊 출석 현황",
+                        color=0x00ff00 if status == "완료" else 0xffcc00
                     )
+                    embed.add_field(name="오늘 출석", value=status, inline=True)
+                    embed.add_field(name="연속 출석", value=f"{streak}일", inline=True)
+                    embed.add_field(name="다음 출석까지", value=time_left_str, inline=True)
+                    embed.set_footer(text=f"확인 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+
+                    await interaction.followup.send(embed=embed, ephemeral=True)
                 else:
                     # 출석 기록이 없거나 초기화된 경우
-                    await interaction.followup.send(
-                        f"📊 출석 현황\n"
-                        f"오늘 출석: 미완료\n"
-                        f"연속 출석: 0일\n"
-                        f"다음 출석까지: 지금 출석 가능!",
-                        ephemeral=True
+                    embed = discord.Embed(
+                        title="📊 출석 현황",
+                        color=0xffcc00
                     )
+                    embed.add_field(name="오늘 출석", value="미완료", inline=True)
+                    embed.add_field(name="연속 출석", value="0일", inline=True)
+                    embed.add_field(name="다음 출석까지", value="지금 출석 가능!", inline=True)
+                    embed.set_footer(text=f"확인 시간: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}")
+
+                    await interaction.followup.send(embed=embed, ephemeral=True)
 
             except discord.NotFound:
                 print("상호작용이 만료되었습니다.", flush=True)
             except Exception as e:
                 print(f"출석정보 확인 중 오류 발생: {e}", flush=True)
                 try:
-                    await interaction.followup.send("오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="❌ 오류",
+                        description="오류가 발생했습니다. 다시 시도해주세요.",
+                        color=0xff0000
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되어 응답을 보낼 수 없습니다.", flush=True)
 
@@ -97,40 +113,55 @@ class General(commands.Cog):
 
                 if result:
                     money = result[0]
-                    await interaction.response.send_message(
-                        f"💰 현재 잔액: {money}원",
-                        ephemeral=True
+                    embed = discord.Embed(
+                        title="💰 통장 잔액",
+                        description=f"현재 잔액: {money:,}원",
+                        color=0x00ff00
                     )
+                    embed.set_footer(text=f"확인 시간: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}")
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
                 else:
-                    await interaction.response.send_message("통장 기록이 없습니다!", ephemeral=True)
+                    error_embed = discord.Embed(
+                        title="❌ 오류",
+                        description="통장 기록이 없습니다!",
+                        color=0xff0000
+                    )
+                    await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
             except Error as e:
                 print(f"잔액 확인 중 오류 발생: {e}")
-                await interaction.response.send_message("잔액 확인 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+                error_embed = discord.Embed(
+                    title="❌ 오류",
+                    description="잔액 확인 중 오류가 발생했습니다. 다시 시도해주세요.",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed, ephemeral=True)
             finally:
                 conn.close()
 
         @bot.tree.command(name="출석초기화", description="연속 출석 일수를 초기화합니다. (보유 금액은 유지)")
         async def reset_attendance(interaction: discord.Interaction):
             view = ResetAttendanceView(interaction.user.id)
-            await interaction.response.send_message(
-                "⚠️ 정말로 출석 정보를 초기화하시겠습니까?\n"
-                "연속 출석 일수가 초기화됩니다.\n"
-                "💰 보유 금액은 유지됩니다.",
-                view=view,
-                ephemeral=True
+            embed = discord.Embed(
+                title="⚠️ 출석 정보 초기화",
+                description="정말로 출석 정보를 초기화하시겠습니까?\n"
+                          "연속 출석 일수가 초기화됩니다.\n"
+                          "💰 보유 금액은 유지됩니다.",
+                color=0xffcc00
             )
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         @bot.tree.command(name="통장초기화", description="보유한 금액을 0원으로 초기화합니다.")
         async def reset_money(interaction: discord.Interaction):
             view = ResetMoneyView(interaction.user.id)
-            await interaction.response.send_message(
-                "⚠️ 정말로 통장을 초기화하시겠습니까?\n"
-                "보유한 금액이 0원으로 초기화됩니다.\n"
-                "❗ 이 작업은 되돌릴 수 없습니다!",
-                view=view,
-                ephemeral=True
+            embed = discord.Embed(
+                title="⚠️ 통장 초기화",
+                description="정말로 통장을 초기화하시겠습니까?\n"
+                          "보유한 금액이 0원으로 초기화됩니다.\n"
+                          "❗ 이 작업은 되돌릴 수 없습니다!",
+                color=0xff0000
             )
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
