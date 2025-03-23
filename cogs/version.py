@@ -80,7 +80,7 @@ class Version(commands.Cog):
     @app_commands.describe(public="공개 메세지 여부를 선택하세요.")
     @app_commands.choices(public=PUBLIC_OR_NOT_CHOICES)
     async def version(self, interaction: discord.Interaction, public: app_commands.Choice[str]):
-        if public == "True":
+        if public.value == "True":
             await interaction.response.defer(ephemeral=True)
         else:
             await interaction.response.defer()
