@@ -3,7 +3,8 @@ from psycopg2 import Error
 from discord.ext import commands
 from datetime import datetime, timedelta
 
-from Pythfinder import ConfirmView, MoneyResetView, get_db_connection, KST
+from Pythfinder import ResetAttendanceView, ResetMoneyView, KST
+from database_manager import get_db_connection
 
 
 class General(commands.Cog):
@@ -111,7 +112,7 @@ class General(commands.Cog):
 
         @bot.tree.command(name="출석초기화", description="연속 출석 일수를 초기화합니다. (보유 금액은 유지)")
         async def reset_attendance(interaction: discord.Interaction):
-            view = ConfirmView(interaction.user.id)
+            view = ResetAttendanceView(interaction.user.id)
             await interaction.response.send_message(
                 "⚠️ 정말로 출석 정보를 초기화하시겠습니까?\n"
                 "연속 출석 일수가 초기화됩니다.\n"
@@ -122,7 +123,7 @@ class General(commands.Cog):
 
         @bot.tree.command(name="통장초기화", description="보유한 금액을 0원으로 초기화합니다.")
         async def reset_money(interaction: discord.Interaction):
-            view = MoneyResetView(interaction.user.id)
+            view = ResetMoneyView(interaction.user.id)
             await interaction.response.send_message(
                 "⚠️ 정말로 통장을 초기화하시겠습니까?\n"
                 "보유한 금액이 0원으로 초기화됩니다.\n"

@@ -1,22 +1,20 @@
 import os
 import psycopg2
+from psycopg2 import Error
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+# 데이터베이스 연결 함수
 def get_db_connection():
-    """데이터베이스 연결을 생성합니다."""
     try:
-        connection = psycopg2.connect(
-            os.getenv('DATABASE_URL'),
-            cursor_factory=RealDictCursor
-        )
-        return connection
-    except Exception as e:
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+        return conn
+    except Error as e:
         print(f"데이터베이스 연결 오류: {e}")
-        raise
+        return None
 
 
 def execute_query(query, params=None):
