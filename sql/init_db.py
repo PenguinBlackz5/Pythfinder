@@ -1,8 +1,4 @@
-from database_manager import execute_query
-import sys
-import os
-
-sys.path.append(os.path.abspath(".."))
+from database import execute_query
 
 
 def init_database():
