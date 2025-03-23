@@ -73,6 +73,7 @@ def update_balance(user_id: int, amount: int) -> bool:
             return False
         cur.execute('UPDATE user_money SET money = user_money.money + %s WHERE user_id = %s', (amount, user_id))
         conn.commit()
+        print(f"{user_id}님의 통장에 {amount}만큼 변동이 생겼습니다.")
         return True
     except Exception as e:
         print(f"잔액 업데이트 오류: {e}")
