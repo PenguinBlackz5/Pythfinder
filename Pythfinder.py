@@ -3,7 +3,7 @@ from discord.ext import commands
 from psycopg2 import Error
 from datetime import datetime, timedelta
 import pytz
-from discord.ui import View
+from discord.ui import Button, View
 import os
 # 웹 서버를 위한 추가 import
 from flask import Flask
