@@ -84,12 +84,20 @@ class JoinGameButton(discord.ui.Button):
 
     def __init__(self, label, view):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
-        self.view = view  # View에 접근하기 위해 저장
+        self.bot = view.bot
+        self.challenger = view.challenger
+        self.opponent = view.opponent
+        self.interaction = view.interaction
+        self.bet_amount = view.bet_amount
+        self.view = view
 
     async def callback(self, interaction: discord.Interaction):
         """참가 버튼 클릭 시 실행되는 함수"""
         if self.opponent is not None:
             await interaction.response.send_message("이미 상대가 정해졌습니다!", ephemeral=True)
+            return
+        if interaction.user == self.challenger:
+            await interaction.response.send_message("자기 자신과 대전할 수 없습니다!", ephemeral=True)
             return
 
         self.opponent = interaction.user
