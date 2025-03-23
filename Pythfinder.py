@@ -48,10 +48,10 @@ def is_admin_or_developer(interaction: discord.Interaction) -> bool:
     )
 
 
-async def check_user_interaction(interaction: discord.Interaction) -> bool:
+async def check_user_interaction(interaction: discord.Interaction, user_id: int) -> bool:
     """버튼을 클릭한 사용자가 권한이 있는지 확인합니다.
     이후 확인 결과 bool을 반환합니다."""
-    if interaction.user.id != self.user_id:
+    if interaction.user.id != user_id:
         interaction.response.send_message("❌ 본인만 선택할 수 있습니다!", ephemeral=True)
         return False
     return True
@@ -138,7 +138,7 @@ class ResetAttendanceView(View):
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         self.value = True
         self.stop()
@@ -157,7 +157,7 @@ class ResetAttendanceView(View):
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
     async def cancel(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         self.value = False
         self.stop()
@@ -172,7 +172,7 @@ class ResetMoneyView(View):
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         self.value = True
         self.stop()
@@ -191,7 +191,7 @@ class ResetMoneyView(View):
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
     async def cancel(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         self.value = False
         self.stop()
@@ -208,7 +208,7 @@ class ClearAllView(View):
 
     @discord.ui.button(label="✓ 확인", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         self.value = True
         self.stop()
@@ -274,7 +274,7 @@ class ClearAllView(View):
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.gray)
     async def cancel(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         self.value = False
         self.stop()
@@ -288,7 +288,7 @@ class RankingView(View):
 
     @discord.ui.button(label="1️⃣ 출석 랭킹", style=discord.ButtonStyle.primary)
     async def attendance_ranking(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         conn = get_db_connection()
         if not conn:
@@ -358,7 +358,7 @@ class RankingView(View):
 
     @discord.ui.button(label="2️⃣ 보유 금액 랭킹", style=discord.ButtonStyle.primary)
     async def money_ranking(self, interaction: discord.Interaction, button: Button):
-        await check_user_interaction(interaction)
+        await check_user_interaction(interaction, self.user_id)
 
         conn = get_db_connection()
         if not conn:
