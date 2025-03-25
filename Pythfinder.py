@@ -84,6 +84,32 @@ def update_balance(user_id: int, amount: int) -> bool:
         conn.close()
 
 
+def check_balance(user_id: int, required_amount: int) -> bool:
+    """
+    사용자의 잔액이 요구되는 금액 이상인지 확인하는 함수
+
+    Args:
+        user_id (int): 잔액을 확인할 사용자의 ID
+        required_amount (int): 필요한 금액
+
+    Returns:
+        bool: 충분한 잔액이 있으면 True, 그렇지 않으면 False
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT money FROM user_money WHERE user_id = %s", (user_id,))
+        result = cursor.fetchone()
+
+        if result is None:
+            return False
+
+        current_money= result[0]
+        return current_money >= required_amount
+    finally:
+        conn.close()
+
+
 def reset_attendance(user_id: int) -> bool:
     """user_id의 출석 정보를 초기화합니다. (attendance 테이블의 모든 열)
     이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
