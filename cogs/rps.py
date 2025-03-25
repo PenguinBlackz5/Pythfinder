@@ -261,7 +261,7 @@ class RPSGameView(discord.ui.View):
         """남은 시간을 메시지로 업데이트"""
         try:
             # 타이머를 포함한 메시지를 업데이트
-            if self.ready_user is not None or self.opponent is not self.bot:
+            if self.ready_user is not None and self.opponent is not self.bot:
                 time_message = (f"⏳ {remaining_time}초 남았습니다! {self.ready_user.name}님이 선택을 기다리는 중...\n"
                                 f"{self.bet_message}")
             else:
