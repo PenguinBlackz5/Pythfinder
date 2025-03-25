@@ -10,21 +10,27 @@ from database_manager import get_db_connection
 
 # 게임의 실제 구현부
 class RPSGameView(discord.ui.View):
-    def __init__(self, bot, challenger, opponent, interaction, bet_amount, bet_history):
+    def __init__(self, bot: commands.Bot,
+                 challenger: discord.Member,
+                 opponent: discord.Member,
+                 interaction: discord.Interaction,
+                 bet_amount: int,
+                 bet_history: str):
         super().__init__()
-        self.bot = bot
-        self.challenger = challenger  # 플레이어 1
-        self.opponent = opponent  # 플레이어 2
-        self.interaction = interaction  # Discord Interaction 객체
-        self.init_bet_amount = bet_amount  # 최초 베팅 금액
-        self.total_bet_amount = bet_amount * 2  # 총 베팅 금액
-        self.bet_history = bet_history  # 전체 베팅 기록
-        self.choices = {}  # 유저들의 선택 기록
+        self.bot: commands.Bot = bot
+        self.challenger: discord.Member = challenger  # 플레이어 1
+        self.opponent: discord.Member = opponent  # 플레이어 2 - 봇이 들어올 수 있음
+        self.interaction: discord.Interaction = interaction
+        self.init_bet_amount: int = bet_amount  # 최초 베팅 금액
+        self.total_bet_amount: int = bet_amount * 2  # 총 베팅 금액 - 기본값은 참가자 두 명의 최초 베팅금
+        self.bet_history: str = bet_history  # 전체 베팅 기록
+        self.choices: Dict[discord.Member, str] = {}  # 유저들의 선택 기록
 
         # 봇과 대전할 경우 봇의 선택 처리
         if opponent == bot:
-            self.choices[bot.user.id] = random.choice(['가위', '바위', '보'])
-
+            # bot.user를 서버에서 Member 객체로 변환
+            self.opponent = bot.get_guild(interaction.guild.id).get_member(bot.user.id)
+            self.choices[self.opponent] = random.choice(['가위', '바위', '보'])
         self.timer_task = None  # 타이머 작업 저장
         self.ready_user = None  # 첫 번째 선택한 사용자
         self.remaining_time = 60  # 타이머 시작 시간 (60초)
@@ -130,7 +136,8 @@ class RPSGameView(discord.ui.View):
         # 플레이어들의 선택을 정확히 매칭시켜서 결과를 처리
         challenger_choice = self.choices.get(self.challenger)
         opponent_choice = self.choices.get(self.opponent)
-
+        print(f"{self.challenger}가 {challenger_choice}를 냄\n"
+              f"{self.opponent}가 {opponent_choice}를 냄")
         result_details = self.determine_winner(
             self.challenger, challenger_choice,
             self.opponent, opponent_choice
@@ -145,18 +152,10 @@ class RPSGameView(discord.ui.View):
             # 주 베팅금 승자에게 분배
             winner, loser = result_details["winner"], result_details["loser"]
 
-            # 봇이 승자일 경우 user로 변경
-            if winner is self.bot:
-                winner_choice = self.choices[self.bot.user.id]
-                winner = winner.user
-            else:
-                winner_choice = self.choices[winner]
+            print(winner, loser)
+            winner_choice = self.choices[winner]
 
-            if loser is self.bot:
-                loser_choice = self.choices[self.bot.user.id]
-                loser = loser.user
-            else:
-                loser_choice = self.choices[loser]
+            loser_choice = self.choices[loser]
 
             # 추가 베팅 처리
             side_bet_distribution = self.distribute_side_bets(
@@ -293,7 +292,7 @@ class RockPaperScissorsInfoView(discord.ui.View):
         self.total_bet_amount = bet_amount
         self.bet_history = []  # 판돈 증가 기록
         self.timer_task = None  # 타이머 업데이트 작업
-        self.remaining_time = 30  # 타이머의 시작 시간을 설정 (30초)
+        self.remaining_time = 10  # 타이머의 시작 시간을 설정 (30초)
         self.is_vs_bot = interaction.namespace.vs_bot
         self.bet_message = ""
         self.bet_summary = ""
