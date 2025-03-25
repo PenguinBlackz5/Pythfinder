@@ -5,6 +5,7 @@ import sqlite3
 from database_manager import get_db_connection
 
 from Pythfinder import update_balance
+from typing import Optional
 
 
 async def get_user_ids_from_db():
@@ -21,7 +22,7 @@ async def get_user_ids_from_db():
         return []
 
 
-async def get_user_id_from_str_id(interaction: discord.Interaction, user_name: str) -> int | None:
+async def get_user_id_from_str_id(interaction: discord.Interaction, user_name: str) -> Optional[int]:
     """
     사용자 이름(display_name)을 통해 실제 user_id를 찾는 함수
 
@@ -87,6 +88,7 @@ class TransferAutocomplete(commands.Cog):
                 await interaction.response.send_message(f"{amount}원을 송금했습니다.")
             except Exception as e:
                 await interaction.response.send_message(f"송금 중 오류가 발생했습니다: {e}")
+
 
 async def setup(bot):
     await bot.add_cog(TransferAutocomplete(bot))
