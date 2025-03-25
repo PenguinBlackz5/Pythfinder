@@ -292,8 +292,8 @@ class RockPaperScissorsInfoView(discord.ui.View):
         self.total_bet_amount = bet_amount
         self.bet_history = []  # 판돈 증가 기록
         self.timer_task = None  # 타이머 업데이트 작업
-        self.remaining_time = 10 if is_vs_bot else 30  # 타이머의 시작 시간을 설정 (30초)
         self.is_vs_bot = interaction.namespace.vs_bot
+        self.remaining_time = 10 if is_vs_bot else 30  # 타이머의 시작 시간을 설정 (30초)
         self.bet_message = ""
         self.bet_summary = ""
 
