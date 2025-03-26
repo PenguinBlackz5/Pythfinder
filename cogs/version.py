@@ -81,9 +81,9 @@ class Version(commands.Cog):
     @app_commands.choices(public=PUBLIC_OR_NOT_CHOICES)
     async def version(self, interaction: discord.Interaction, public: app_commands.Choice[str]):
         if public.value == "True":
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(ephemeral=False)
         else:
-            await interaction.response.defer()
+            await interaction.response.defer(ephemeral=True)
 
         try:
             # GitHub API를 통해 최신 커밋 정보 가져오기
