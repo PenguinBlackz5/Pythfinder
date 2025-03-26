@@ -4,7 +4,7 @@ from discord import app_commands
 import random
 import asyncio
 from typing import Dict, Tuple, List, Optional
-from Pythfinder import update_balance, check_balance
+from main import update_balance, check_balance
 from database_manager import execute_query
 
 
@@ -378,7 +378,7 @@ class RockPaperScissorsInfoView(discord.ui.View):
         """메시지를 업데이트"""
         try:
             await self.interaction.edit_original_response(
-                content=f"💰 베팅 금액: {self.bet_amount}원\n\n"
+                content=f"💰 베팅 금액: {self.total_bet_amount}원\n\n"
                         f"{self.bet_message}"
                         f"👤 도전자: {self.challenger.name}\n"
                         f"👥 상대방: {self.opponent.name if self.opponent else '대기 중...'}\n\n"
@@ -392,7 +392,7 @@ class RockPaperScissorsInfoView(discord.ui.View):
         """게임 시작"""
         self.timer_task = asyncio.create_task(self.start_timer())
         asyncio.create_task(self.interaction.edit_original_response(
-            content=f"💰 베팅 금액: {self.bet_amount}원\n\n"
+            content=f"💰 베팅 금액: {self.total_bet_amount}원\n\n"
                     f"{self.bet_message}"
                     f"👤 도전자: {self.challenger.name}\n"
                     f"👥 상대방: 대기 중...\n\n"
@@ -472,9 +472,18 @@ class JoinGameButton(discord.ui.Button):
                 f"{view.challenger.mention}님과 {view.opponent.mention}님이 💰***{view.total_bet_amount}원***을 걸고 경기를 기다리고 있습니다!"
             )
 
+        # 업데이트된 베팅 금액 반영
+        view.clear_items()
+        try:
+            view.add_item(IncreaseBetButton(view, view.challenger))
+            view.add_item(IncreaseBetButton(view, view.opponent.user))
+        except Exception as e:
+            print(e)
+
         await interaction.edit_original_response(view=view)
 
 
+# 일단 안쓰는데 신기해서 보류
 class BetAmountModal(discord.ui.Modal):
     def __init__(self, view: RockPaperScissorsInfoView, user: discord.Member):
         super().__init__(title="베팅 금액 입력")
@@ -489,22 +498,75 @@ class BetAmountModal(discord.ui.Modal):
         )
         self.add_item(self.bet_amount)
 
-    async def on_submit(self, interaction: discord.Interaction):
+
+class IncreaseBetButton(discord.ui.Button):
+    """판돈 추가 버튼"""
+
+    def __init__(self, view: RockPaperScissorsInfoView, target: discord.interactions.User):
+        """view, 베팅 대상"""
+
+        # 추가 베팅 금액을 동적으로 계산
+        increase_amount = view.total_bet_amount // 2 if view.total_bet_amount > 0 else view.init_bet_amount // 2
+        increase_amount = max(increase_amount, 1)  # 최소 1원 보장
+
+        if isinstance(target, commands.Bot):
+            label = f"📈 {increase_amount}원으로 봇의 승리에 베팅"
+        else:
+            label = f"📈 {increase_amount}원으로 {target.name}님의 승리에 베팅"  # 동적 라벨 설정
+
+        super().__init__(label=label, style=discord.ButtonStyle.success)
+        self.target = target  # 베팅 대상 설정
+        self.increase_amount = increase_amount  # 추가 베팅 금액 저장
+
+    async def callback(self, interaction: discord.Interaction):
+        """베팅 추가 버튼 클릭 시 실행"""
+        view: RockPaperScissorsInfoView = getattr(self, "view", None)
+        target: discord.interactions.User = self.target
+
+        increase_amount = view.total_bet_amount // 2  # 현재 판돈의 50%
+        if increase_amount < 1:
+            increase_amount = 1
+
+        if interaction.user in [view.challenger, view.opponent]:
+            error_embed = discord.Embed(
+                title="❌ 오류",
+                description="게임 참가자는 베팅할 수 없습니다!",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=error_embed, ephemeral=True)
+            await asyncio.sleep(3)
+            await interaction.delete_original_response()
+            return
+
+        # 잔액 확인
+        if not check_balance(interaction.user.id, increase_amount):
+            error_embed = discord.Embed(
+                title="❌ 오류",
+                description="보유 금액이 부족합니다!",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=error_embed, ephemeral=True)
+            await asyncio.sleep(3)
+            await interaction.delete_original_response()
+            return
+
+        await interaction.response.defer()
+
+        # 잔액 차감
         try:
-            amount = int(self.bet_amount.value)
-            if amount <= 0:
+            if bet_amount <= 0:
                 await interaction.response.send_message("베팅 금액은 0보다 커야 합니다!", ephemeral=True)
                 return
 
             # 사용자의 잔액 확인
-            balance = await check_balance(self.user.id)
-            if balance < amount:
+            balance = await check_balance(self.user.id, bet_amount)
+            if balance < bet_amount:
                 await interaction.response.send_message("잔액이 부족합니다!", ephemeral=True)
                 return
 
             # 베팅 처리
             view.total_bet_amount += self.increase_amount
-            self.view.bet_history.append((self.user, amount, self.view.challenger))
+            self.view.bet_history.append((interaction.user, self.increase_amount, target))
             # 베팅 기록 메시지 변환
             view.bet_summary = "\n".join([
                 f"{user.mention}님이 " +
@@ -529,6 +591,20 @@ class BetAmountModal(discord.ui.Modal):
                     f"📜 **베팅 기록:**\n{view.bet_summary}"
                 )
 
+            # 업데이트된 베팅 금액 반영
+            view.clear_items()
+
+            # 베팅 대상에 따라 버튼을 추가
+            if view.opponent is not None:
+                # 상대방이 있을 때는 두 사람 모두에게 베팅 버튼을 추가
+                view.add_item(IncreaseBetButton(view, view.challenger))
+                view.add_item(IncreaseBetButton(view, view.opponent))
+            else:
+                # 상대방이 없을 때는 챌린저만 베팅 버튼을 추가
+                view.add_item(JoinGameButton(view))
+                view.add_item(IncreaseBetButton(view, view.challenger))
+
+            await interaction.edit_original_response(content=view.bet_message, view=view)
 
         except ValueError:
             await interaction.response.send_message("올바른 숫자를 입력해주세요!", ephemeral=True)
@@ -551,13 +627,27 @@ class RockPaperScissors(commands.Cog):
                 await interaction.response.send_message("베팅 금액은 0보다 커야 합니다!", ephemeral=True)
                 return
 
-            # 사용자의 잔액 확인
-            balance = await check_balance(interaction.user.id, bet_amount)
-            if balance < bet_amount:
-                await interaction.response.send_message("잔액이 부족합니다!", ephemeral=True)
+            # 잔액 차감
+            if not await update_balance(interaction.user.id, -bet_amount):
+                error_embed = discord.Embed(
+                    title="❌ 오류",
+                    description="보유 금액이 부족합니다!",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=error_embed)
+                await asyncio.sleep(3)
+                await interaction.delete_original_response()
                 return
 
-            # 봇과 대전할 경우
+            # 최초 메시지를 생성
+            await interaction.response.send_message("로딩 중...", ephemeral=False)
+
+            # 게임 참가 버튼 생성 및 텍스트 view
+            view = RockPaperScissorsInfoView(bot, interaction.user, interaction, bet_amount)
+
+            view.start()  # 타이머 시작
+
+            # 봇과 대전시
             if vs_bot:
                 await update_balance(bot.user.id, -bet_amount)
                 game_view = RPSGameView(

@@ -9,6 +9,9 @@ import datetime
 from dotenv import load_dotenv
 import subprocess
 import pytz
+from typing import Optional, List
+from database_manager import execute_query
+from main import is_admin_or_developer, DEVELOPER_IDS
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()

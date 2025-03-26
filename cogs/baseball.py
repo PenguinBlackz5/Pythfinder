@@ -3,7 +3,7 @@ from discord.ext import commands
 import random
 import asyncio
 from typing import Dict, Tuple
-from Pythfinder import update_balance
+from main import update_balance
 from database_manager import execute_query
 
 

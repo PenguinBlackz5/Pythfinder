@@ -4,7 +4,7 @@ from discord.ext import commands
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from Pythfinder import DEVELOPER_IDS, KST, RankingView, ClearAllView, is_admin_or_developer
+from main import DEVELOPER_IDS, KST, RankingView, ClearAllView, is_admin_or_developer
 from database_manager import execute_query
 
 
