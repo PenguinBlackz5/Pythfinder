@@ -17,9 +17,7 @@ async def fetch_all_data(table_name: str) -> str:
         col_names = list(result[0].keys())
         
         # 데이터 출력
-        output = []
-        output.append(" | ".join(col_names))  # 컬럼명 추가
-        output.append("-" * 50)  # 구분선 추가
+        output = [" | ".join(col_names), "-" * 50]
         for row in result:
             output.append(" | ".join(map(str, row.values())))  # 데이터 추가
 

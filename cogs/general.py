@@ -36,7 +36,7 @@ class General(commands.Cog):
                     now = datetime.now(KST)
                     next_attendance = last_attendance + timedelta(days=1)
                     next_attendance = datetime(next_attendance.year, next_attendance.month, next_attendance.day,
-                                             tzinfo=KST)
+                                               tzinfo=KST)
                     time_left = next_attendance - now
 
                     if time_left.total_seconds() <= 0:
@@ -125,8 +125,8 @@ class General(commands.Cog):
             embed = discord.Embed(
                 title="⚠️ 출석 정보 초기화",
                 description="정말로 출석 정보를 초기화하시겠습니까?\n"
-                          "연속 출석 일수가 초기화됩니다.\n"
-                          "💰 보유 금액은 유지됩니다.",
+                            "연속 출석 일수가 초기화됩니다.\n"
+                            "💰 보유 금액은 유지됩니다.",
                 color=0xffcc00
             )
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -137,8 +137,8 @@ class General(commands.Cog):
             embed = discord.Embed(
                 title="⚠️ 통장 초기화",
                 description="정말로 통장을 초기화하시겠습니까?\n"
-                          "보유한 금액이 0원으로 초기화됩니다.\n"
-                          "❗ 이 작업은 되돌릴 수 없습니다!",
+                            "보유한 금액이 0원으로 초기화됩니다.\n"
+                            "❗ 이 작업은 되돌릴 수 없습니다!",
                 color=0xff0000
             )
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)

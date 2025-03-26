@@ -67,7 +67,7 @@ class Admin(commands.Cog):
                 )
 
                 # 메모리 캐시 업데이트
-                result = await execute_query('SELECT channel_id FROM attendance_channels')
+                result = await execute_query('SELECT channel_id FROM channels')
                 if result:
                     bot.attendance_channels = {row['channel_id'] for row in result}
                     print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)
@@ -79,7 +79,7 @@ class Admin(commands.Cog):
                     success_embed = discord.Embed(
                         title="✅ 출석 채널 설정 완료",
                         description=f"이 채널이 출석 채널로 지정되었습니다!\n"
-                                  f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
+                                    f"📝 기존에 등록되어 있던 {deleted_count}개의 출석 채널이 초기화되었습니다.",
                         color=0x00ff00
                     )
                     await interaction.followup.send(embed=success_embed, ephemeral=True)
@@ -97,6 +97,8 @@ class Admin(commands.Cog):
                     await interaction.followup.send(embed=error_embed, ephemeral=True)
                 except discord.NotFound:
                     print("상호작용이 만료되었습니다.", flush=True)
+            finally:
+                print("=== 출석 채널 설정 완료 ===\n", flush=True)
 
         @bot.tree.command(name="출석현황", description="서버 멤버들의 출석 현황을 확인합니다. (개발자 전용)")
         async def check_server_attendance(interaction: discord.Interaction):
@@ -116,7 +118,7 @@ class Admin(commands.Cog):
                 member_ids = [member.id for member in guild.members if not member.bot]
 
                 # 출석 데이터 조회
-                result = await execute_query(
+                attendance_results = await execute_query(
                     '''
                     SELECT 
                         user_id,
@@ -130,13 +132,25 @@ class Admin(commands.Cog):
                     (member_ids,)
                 )
 
-                if not result:
+                if not attendance_results:
                     await interaction.response.send_message("아직 출석 기록이 없습니다.", ephemeral=True)
                     return
 
+                user_money_results = await execute_query(
+                    '''
+                    SELECT
+                        user_id,
+                        money
+                    FROM user_money
+                    where user_id = Any($1)
+                    ORDER BY money DESC 
+                    ''',
+                    (member_ids,)
+                )
+
                 # 결과 처리
                 attendance_data = []
-                for row in result:
+                for row in attendance_results:
                     member = guild.get_member(row['user_id'])
                     if member:
                         attendance_data.append({
@@ -145,6 +159,24 @@ class Admin(commands.Cog):
                             'streak': row['streak_count'],
                             'last': row['last_attendance']
                         })
+
+                user_money_data = []
+                for row in user_money_results:
+                    member = guild.get_member(row['user_id'])
+                    if member:
+                        user_money_data.append({
+                            'name': member.display_name,
+                            'money': row['money']
+                        })
+
+                registered_members = len(attendance_results)
+                today_attendance = sum(
+                    1 for row in (attendance_results or [])
+                    if row.get("attendance_date") and row["attendance_date"].strftime('%Y-%m-%d') == today)
+                total_money = sum(
+                    row.get("money") for row in (user_money_results or [])
+                    if row.get("money")
+                )
 
                 # 메시지 구성
                 embed = discord.Embed(
@@ -164,6 +196,12 @@ class Admin(commands.Cog):
                         inline=False
                     )
 
+                # 통계 정보
+                stats_text = f"등록 멤버: {registered_members}명\n"
+                stats_text += f"오늘 출석: {today_attendance}명\n"
+                stats_text += f"전체 보유 금액: {total_money:,}원"
+                embed.add_field(name="📈 통계", value=stats_text, inline=False)
+
                 await interaction.response.send_message(embed=embed, ephemeral=True)
 
             except Exception as e:
@@ -177,7 +215,14 @@ class Admin(commands.Cog):
         @bot.tree.command(name="랭킹", description="서버의 출석/보유금액 랭킹을 확인합니다.")
         async def check_ranking(interaction: discord.Interaction):
             view = RankingView(interaction.user.id)
-            await interaction.response.send_message("랭킹을 확인할 항목을 선택하세요.", view=view, ephemeral=True)
+            embed = discord.Embed(
+                title="📊 랭킹 확인",
+                description="확인하고 싶은 랭킹을 선택해주세요!\n\n"
+                            "1️⃣ 출석 랭킹: 연속 출석 일수 기준 TOP 10\n"
+                            "2️⃣ 보유 금액 랭킹: 보유 금액 기준 TOP 10",
+                color=0x00ff00
+            )
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         @bot.tree.command(name="클리어올캐시", description="⚠️ 이 서버의 모든 출석 데이터를 초기화합니다. (개발자 전용)")
         async def clear_all_cache(interaction: discord.Interaction):
