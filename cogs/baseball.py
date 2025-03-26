@@ -4,7 +4,7 @@ import random
 import asyncio
 from typing import Dict, Tuple
 from Pythfinder import update_balance
-from database_manager import get_db_connection
+from database_manager import execute_query
 
 
 def generate_number() -> str:
@@ -39,7 +39,7 @@ class Baseball(commands.Cog):
 
             # 베팅금 차감
             try:
-                if not update_balance(interaction.user.id, -bet_amount):
+                if not await update_balance(interaction.user.id, -bet_amount):
                     error_embed = discord.Embed(
                         title="❌ 오류",
                         description="보유 금액이 부족합니다!",
@@ -126,7 +126,7 @@ class Baseball(commands.Cog):
 
                         try:
                             # 봇의 잔고에서 차감하고 유저에게 지급
-                            if update_balance(bot.user.id, -winnings) and update_balance(interaction.user.id, winnings):
+                            if await update_balance(bot.user.id, -winnings) and await update_balance(interaction.user.id, winnings):
                                 win_embed = discord.Embed(
                                     title="🎉 승리!",
                                     description=f"정답입니다! {target_number}\n"
@@ -186,7 +186,7 @@ class Baseball(commands.Cog):
                     del self.active_games[interaction.user.id]
                     return
             # 봇 잔고 추가
-            update_balance(bot.user.id, bet_amount)
+            await update_balance(bot.user.id, bet_amount)
             # DM으로 결과 전송
             lose_embed = discord.Embed(
                 title="😢 게임 종료",

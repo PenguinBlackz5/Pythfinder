@@ -1,10 +1,10 @@
 import discord
-from psycopg2 import Error
 from discord.ext import commands
 from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
 
 from Pythfinder import ResetAttendanceView, ResetMoneyView, KST
-from database_manager import get_db_connection
+from database_manager import execute_query
 
 
 class General(commands.Cog):
@@ -13,7 +13,6 @@ class General(commands.Cog):
 
         @bot.tree.command(name="출석정보", description="자신의 출석 현황을 확인합니다.")
         async def check_attendance(interaction: discord.Interaction):
-            conn = None
             try:
                 # 즉시 응답 대기 상태로 전환
                 await interaction.response.defer(ephemeral=True)
@@ -21,24 +20,14 @@ class General(commands.Cog):
                 user_id = interaction.user.id
                 today = datetime.now(KST).strftime('%Y-%m-%d')
 
-                conn = get_db_connection()
-                if not conn:
-                    error_embed = discord.Embed(
-                        title="❌ 데이터베이스 오류",
-                        description="데이터베이스 연결 실패!",
-                        color=0xff0000
-                    )
-                    await interaction.followup.send(embed=error_embed, ephemeral=True)
-                    return
+                result = await execute_query(
+                    'SELECT last_attendance, streak_count FROM user_attendance WHERE user_id = $1',
+                    (user_id,)
+                )
 
-                c = conn.cursor()
-
-                c.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (user_id,))
-                result = c.fetchone()
-
-                if result and result[0] is not None:
-                    last_attendance = result[0]
-                    streak = result[1]
+                if result and result[0]['last_attendance'] is not None:
+                    last_attendance = result[0]['last_attendance']
+                    streak = result[0]['streak_count']
 
                     status = "완료" if last_attendance.strftime('%Y-%m-%d') == today else "미완료"
 
@@ -46,7 +35,7 @@ class General(commands.Cog):
                     now = datetime.now(KST)
                     next_attendance = last_attendance + timedelta(days=1)
                     next_attendance = datetime(next_attendance.year, next_attendance.month, next_attendance.day,
-                                               tzinfo=KST)
+                                             tzinfo=KST)
                     time_left = next_attendance - now
 
                     if time_left.total_seconds() <= 0:
@@ -93,26 +82,18 @@ class General(commands.Cog):
                 except discord.NotFound:
                     print("상호작용이 만료되어 응답을 보낼 수 없습니다.", flush=True)
 
-            finally:
-                if conn:
-                    conn.close()
-
         @bot.tree.command(name="통장", description="보유한 금액을 확인합니다.")
         async def check_balance(interaction: discord.Interaction):
             user_id = interaction.user.id
 
-            conn = get_db_connection()
-            if not conn:
-                return
-
             try:
-                cur = conn.cursor()
-
-                cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
-                result = cur.fetchone()
+                result = await execute_query(
+                    'SELECT balance FROM user_balance WHERE user_id = $1',
+                    (user_id,)
+                )
 
                 if result:
-                    money = result[0]
+                    money = result[0]['balance']
                     embed = discord.Embed(
                         title="💰 통장 잔액",
                         description=f"현재 잔액: {money:,}원",
@@ -128,7 +109,7 @@ class General(commands.Cog):
                     )
                     await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
-            except Error as e:
+            except Exception as e:
                 print(f"잔액 확인 중 오류 발생: {e}")
                 error_embed = discord.Embed(
                     title="❌ 오류",
@@ -136,8 +117,6 @@ class General(commands.Cog):
                     color=0xff0000
                 )
                 await interaction.response.send_message(embed=error_embed, ephemeral=True)
-            finally:
-                conn.close()
 
         @bot.tree.command(name="출석초기화", description="연속 출석 일수를 초기화합니다. (보유 금액은 유지)")
         async def reset_attendance(interaction: discord.Interaction):

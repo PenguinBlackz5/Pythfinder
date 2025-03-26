@@ -12,8 +12,9 @@ from dotenv import load_dotenv
 import requests  # 새로 추가
 import time  # 새로 추가
 import sys
+from typing import Optional, List, Dict, Any
 
-from database_manager import get_db_connection
+from database_manager import get_db_connection, execute_query
 
 # 환경변수 로드
 load_dotenv()
@@ -57,106 +58,64 @@ async def check_user_interaction(interaction: discord.Interaction, user_id: int)
     return True
 
 
-def update_balance(user_id: int, amount: int) -> bool:
-    """user_id의 잔고를 amount만큼 업데이트합니다. (amount 양수, 음수 입력시 증감)
-    이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
-    이후 업데이트 정상 작동 여부 bool을 반환합니다."""
-    conn = get_db_connection()
-
-    if not conn:
-        return False
+async def update_balance(user_id: int, amount: int) -> bool:
+    """user_id의 잔고를 amount만큼 업데이트합니다."""
     try:
-        cur = conn.cursor()
-        cur.execute('SElECT money FROM  user_money WHERE user_id = %s', (user_id,))
-        result = cur.fetchone()
-        if not result or result[0] < -amount:
-            # 잔액 부족
+        result = await execute_query(
+            'SELECT money FROM user_money WHERE user_id = $1',
+            (user_id,)
+        )
+        if not result or result[0]['money'] < -amount:
             return False
-        cur.execute('UPDATE user_money SET money = user_money.money + %s WHERE user_id = %s', (amount, user_id))
-        conn.commit()
+            
+        await execute_query(
+            'UPDATE user_money SET money = user_money.money + $1 WHERE user_id = $2',
+            (amount, user_id)
+        )
         print(f"{user_id}님의 통장에 {amount}만큼 변동이 생겼습니다.")
         return True
     except Exception as e:
         print(f"잔액 업데이트 오류: {e}")
         return False
-    finally:
-        print("통장 잔고 업데이트를 위한 커넥션을 닫습니다.")
-        conn.close()
 
 
-def check_balance(user_id: int, required_amount: int) -> bool:
-    """
-    사용자의 잔액이 요구되는 금액 이상인지 확인하는 함수
-
-    Args:
-        user_id (int): 잔액을 확인할 사용자의 ID
-        required_amount (int): 필요한 금액
-
-    Returns:
-        bool: 충분한 잔액이 있으면 True, 그렇지 않으면 False
-    """
-    conn = get_db_connection()
+async def check_balance(user_id: int, required_amount: int) -> bool:
+    """사용자의 잔액이 요구되는 금액 이상인지 확인합니다."""
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT money FROM user_money WHERE user_id = %s", (user_id,))
-        result = cursor.fetchone()
-
-        if result is None:
-            return False
-
-        current_money= result[0]
-        return current_money >= required_amount
-    finally:
-        conn.close()
-
-
-def reset_attendance(user_id: int) -> bool:
-    """user_id의 출석 정보를 초기화합니다. (attendance 테이블의 모든 열)
-    이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
-    이후 출석 초기화 정상 작동 여부 bool을 반환합니다."""
-    conn = get_db_connection()
-    if not conn:
+        result = await execute_query(
+            'SELECT money FROM user_money WHERE user_id = $1',
+            (user_id,)
+        )
+        return bool(result and result[0]['money'] >= required_amount)
+    except Exception as e:
+        print(f"잔액 확인 오류: {e}")
         return False
+
+
+async def reset_attendance(user_id: int) -> bool:
+    """사용자의 출석 기록을 초기화합니다."""
     try:
-        cur = conn.cursor()
-        cur.execute('''
-            INSERT INTO attendance (user_id, last_attendance, streak)
-            VALUES (%s, NULL, 0)
-            ON CONFLICT (user_id) DO UPDATE 
-            SET last_attendance = NULL, streak = 0
-        ''', (user_id,))
-        conn.commit()
+        await execute_query(
+            'UPDATE user_attendance SET attendance_count = 0, last_attendance = NULL WHERE user_id = $1',
+            (user_id,)
+        )
         return True
-    except Error as e:
-        print(f"출석 정보 초기화를 위한 데이터베이스 조회중 오류: {e}")
+    except Exception as e:
+        print(f"출석 초기화 오류: {e}")
         return False
-    finally:
-        conn.close()
 
 
-def reset_money(user_id: int) -> bool:
-    """user_id의 잔고를 초기화합니다. (user_money 테이블의 money 열)
-        이미 데이터베이스 커넥션이 열려있는 경우에는 사용이 불가합니다.
-        이후 잔고 초기화 정상 작동 여부 bool을 반환합니다."""
-    conn = get_db_connection()
-    if not conn:
-        return False
+async def reset_money(user_id: int) -> bool:
+    """사용자의 잔액을 초기화합니다."""
     try:
-        cur = conn.cursor()
-        # user_money 테이블에서 금액 초기화
-        cur.execute('''
-            INSERT INTO user_money (user_id, money)
-            VALUES (%s, 0)
-            ON CONFLICT (user_id) DO UPDATE 
-            SET money = 0
-        ''', (user_id,))
-        conn.commit()
+        await execute_query(
+            'UPDATE user_money SET money = 0 WHERE user_id = $1',
+            (user_id,)
+        )
         return True
-    except Error as e:
-        print(f"잔고 초기화를 위한 데이터베이스 조회중 오류: {e}")
+    except Exception as e:
+        print(f"잔액 초기화 오류: {e}")
         return False
-    finally:
-        conn.close()
 
 
 class ResetAttendanceView(View):
@@ -173,7 +132,7 @@ class ResetAttendanceView(View):
         self.stop()
 
         try:
-            if not reset_attendance(user_id):
+            if not await reset_attendance(self.user_id):
                 return
             else:
                 await interaction.response.edit_message(
@@ -207,7 +166,7 @@ class ResetMoneyView(View):
         self.stop()
 
         try:
-            if not reset_money(user_id):
+            if not await reset_money(self.user_id):
                 return
             else:
                 await interaction.response.edit_message(
@@ -545,27 +504,8 @@ class AttendanceBot(commands.Bot):
         self.attendance_cache[cache_key] = True
 
     async def setup_hook(self):
-        print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
-        print("\n=== cog 파일 로드 시작 ===", flush=True)
-
-        # cogs 폴더에 있는 모든 .py 파일을 불러옴
-        for filename in os.listdir("./cogs"):
-            if filename.endswith(".py"):
-                await self.load_extension(f"cogs.{filename[:-3]}")
-                print(f"✅ {filename} 로드 완료")
-
-        # 슬래시 명령어 동기화
-        try:
-            print("슬래시 명령어 동기화 시작...", flush=True)
-            synced = await self.tree.sync()
-            print(f"동기화된 슬래시 명령어: {len(synced)}개", flush=True)
-
-            # 동기화된 명령어 목록 출력
-            for cmd in synced:
-                print(f"- {cmd.name}", flush=True)
-        except Exception as e:
-            print(f"슬래시 명령어 동기화 중 오류 발생: {e}", flush=True)
-        print("=== 이벤트 핸들러 등록 완료 ===\n", flush=True)
+        await self.init_database()
+        await self.load_attendance_channels()
 
     async def on_ready(self):
         print("\n" + "=" * 50, flush=True)
@@ -581,295 +521,90 @@ class AttendanceBot(commands.Bot):
 
         print("=" * 50 + "\n", flush=True)
 
-    def init_database(self):
-        if self._db_initialized:
-            print("데이터베이스가 이미 초기화되어 있습니다.", flush=True)
-            sys.stdout.flush()
-            return
-
-        print("\n=== 데이터베이스 초기화 시작 ===", flush=True)
-        sys.stdout.flush()
-        print("데이터베이스 연결 시도 중...", flush=True)
-        sys.stdout.flush()
-        conn = get_db_connection()
-        if not conn:
-            print("데이터베이스 연결 실패", flush=True)
-            sys.stdout.flush()
-            return
-
+    async def init_database(self):
+        """데이터베이스 초기화"""
         try:
-            cur = conn.cursor()
-            print("데이터베이스 연결 성공", flush=True)
-            sys.stdout.flush()
-
-            # 테이블 생성
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS attendance (
+            await execute_query('''
+                CREATE TABLE IF NOT EXISTS user_attendance (
                     user_id BIGINT PRIMARY KEY,
+                    attendance_count INTEGER DEFAULT 0,
                     last_attendance TIMESTAMP,
-                    streak INTEGER DEFAULT 0,
+                    streak_count INTEGER DEFAULT 0
+                )
+            ''')
+            
+            await execute_query('''
+                CREATE TABLE IF NOT EXISTS user_money (
+                    user_id BIGINT PRIMARY KEY,
                     money INTEGER DEFAULT 0
                 )
             ''')
-            print("attendance 테이블 확인/생성 완료", flush=True)
-            sys.stdout.flush()
-
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS channels (
-                    channel_id BIGINT PRIMARY KEY
+            
+            await execute_query('''
+                CREATE TABLE IF NOT EXISTS attendance_channels (
+                    channel_id BIGINT PRIMARY KEY,
+                    guild_id BIGINT NOT NULL
                 )
             ''')
-            print("channels 테이블 확인/생성 완료", flush=True)
-            sys.stdout.flush()
-
-            conn.commit()
-            self._db_initialized = True
-            print("=== 데이터베이스 초기화 완료 ===\n", flush=True)
-            sys.stdout.flush()
-
-        except Error as e:
-            print(f"데이터베이스 초기화 중 오류 발생: {e}", flush=True)
-            sys.stdout.flush()
-        finally:
-            if conn:
-                conn.close()
-
-    def load_attendance_channels(self):
-        print("\n=== 출석 채널 로드 시작 ===", flush=True)
-        conn = get_db_connection()
-        if not conn:
-            print("데이터베이스 연결 실패", flush=True)
-            return
-
-        try:
-            cur = conn.cursor()
-            cur.execute('SELECT channel_id FROM channels')
-            channels = cur.fetchall()
-            self.attendance_channels = set(channel[0] for channel in channels)
-            print(f"로드된 출석 채널: {self.attendance_channels}", flush=True)
-        except Error as e:
-            print(f"채널 로드 오류: {e}", flush=True)
-        finally:
-            conn.close()
-        print("=== 출석 채널 로드 완료 ===\n", flush=True)
-
-    async def on_message(self, message):
-        print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
-        print(f"메시지 ID: {message.id}", flush=True)
-        print(f"작성자: {message.author.name}", flush=True)
-        print(f"메시지 내용: {message.content}", flush=True)  # 메시지 내용 추가
-
-        # DM 채널인 경우 명령어만 처리하고 종료
-        if isinstance(message.channel, discord.DMChannel):
-            print("DM 채널 메시지 - 명령어만 처리", flush=True)
-            await self.process_commands(message)
-            return
-
-        # 채널 정보 출력 (DM이 아닌 경우에만)
-        try:
-            print(f"채널: {message.channel.name}", flush=True)
-            print(f"채널 ID: {message.channel.id}", flush=True)
-            print(f"등록된 출석 채널: {self.attendance_channels}", flush=True)
-        except AttributeError:
-            print("채널 정보를 가져올 수 없습니다.", flush=True)
-
-        print("=" * 50 + "\n", flush=True)
-
-        # 봇 메시지 무시
-        if message.author == self.user or message.author.bot:
-            print("봇 메시지 무시", flush=True)
-            return
-
-        # 명령어 처리 시도
-        await self.process_commands(message)
-
-        # 출석 채널이 아닌 경우 무시
-        if message.channel.id not in self.attendance_channels:
-            print("출석 채널이 아님. 무시", flush=True)
-            return
-
-        # 이미 처리된 메시지인지 확인
-        if self.is_message_processed(message.id):
-            print("이미 처리된 메시지. 무시", flush=True)
-            return
-
-        try:
-            # 메시지를 처리 중으로 표시
-            self.mark_message_as_processing(message.id)
-
-            # 사용자 ID와 오늘 날짜로 캐시 키 생성
-            user_id = message.author.id
-            today = datetime.now(KST).strftime('%Y-%m-%d')
-            cache_key = f"{user_id}_{today}"
-
-            # 데이터베이스에서 먼저 출석 여부 확인
-            conn = get_db_connection()
-            if not conn:
-                print("데이터베이스 연결 실패", flush=True)
-                return
-
-            cur = conn.cursor()
-
-            cur.execute('''
-                SELECT last_attendance 
-                FROM attendance 
-                WHERE user_id = %s AND last_attendance::date = %s
-            ''', (user_id, today))
-
-            if cur.fetchone():
-                print(f"이미 오늘 출석한 사용자: {user_id}", flush=True)
-                msg = await message.channel.send(f"{message.author.mention}님, 이미 출석하셨습니다.", delete_after=3)
-                self.mark_message_as_processed(message.id)
-                return
-
-            # 현재 사용자 정보 확인
-            cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (user_id,))
-            attendance_result = cur.fetchone()
-            cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
-            money_result = cur.fetchone()
-
-            if attendance_result and money_result:
-                last_attendance = attendance_result[0]
-                current_streak = attendance_result[1]
-                current_money = money_result[0]
-
-                # 연속 출석 확인
-                yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
-                if last_attendance and last_attendance.strftime('%Y-%m-%d') == yesterday:
-                    streak = current_streak + 1
-                else:
-                    streak = 1
-            else:
-                # 새로운 사용자
-                current_money = 0
-                streak = 1
-
-            # 출석 순서 확인
-            cur.execute('''
-                SELECT COUNT(*) FROM attendance 
-                WHERE last_attendance::date = %s AND user_id != %s
-            ''', (today, user_id))
-            attendance_order = cur.fetchone()[0] + 1
-
-            # 출석 정보 업데이트
-            cur.execute('''
-                INSERT INTO attendance (user_id, last_attendance, streak)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE 
-                SET last_attendance = %s, 
-                    streak = %s
-            ''', (user_id, today, streak, today, streak))
-
-            cur.execute('''
-                INSERT INTO user_money (user_id, money)
-                Values (%s, %s)
-                On CONFLICT (user_id) DO UPDATE
-                SET money = user_money.money + 10
-            ''', (user_id, current_money))
-
-            conn.commit()
-
-            # 출석 메시지 전송
-            await message.channel.send(
-                f"🎉 {message.author.mention}님 출석하셨습니다!\n"
-                f"오늘 {attendance_order}번째 출석이에요.\n"
-                f"현재 {streak}일 연속 출석 중입니다!\n"
-                f"💰 출석 보상 10원이 지급되었습니다."
-            )
-
         except Exception as e:
-            print(f"출석 처리 중 오류 발생: {e}", flush=True)
-            self.clear_processing_message(message.id)
+            print(f"데이터베이스 초기화 오류: {e}")
+
+    async def load_attendance_channels(self):
+        """출석 채널 목록을 로드합니다."""
+        try:
+            result = await execute_query('SELECT channel_id FROM attendance_channels')
+            self.attendance_channels = {row['channel_id'] for row in result}
+        except Exception as e:
+            print(f"출석 채널 로드 오류: {e}")
+            self.attendance_channels = set()
 
     async def process_attendance(self, message):
         """출석 처리를 수행합니다."""
-        conn = None
         try:
             user_id = message.author.id
-            today = datetime.now(KST).strftime('%Y-%m-%d')
-            cache_key = f"{user_id}_{today}"
-
-            # 데이터베이스 연결
-            conn = get_db_connection()
-            if not conn:
-                print("데이터베이스 연결 실패", flush=True)
+            today = datetime.now(KST).date()
+            
+            # 중복 체크
+            if self.is_duplicate_message(user_id, today):
                 return
-
-            cur = conn.cursor()
-
-            # 먼저 오늘 이미 출석했는지 확인
-            cur.execute('''
-                SELECT last_attendance 
-                FROM attendance 
-                WHERE user_id = %s AND last_attendance::date = %s
-            ''', (user_id, today))
-
-            if cur.fetchone():
-                print(f"이미 오늘 출석한 사용자: {user_id}", flush=True)
-                return
-
-            # 현재 사용자 정보 확인
-            cur.execute('SELECT last_attendance, streak FROM attendance WHERE user_id = %s', (user_id,))
-            attendance_result = cur.fetchone()
-            cur.execute('SELECT money FROM user_money WHERE user_id = %s', (user_id,))
-            money_result = cur.fetchone()
-
-            if result:
-                last_attendance = attendance_result[0]
-                current_streak = attendance_result[1]
-                current_money = money_result[0]
-
-                # 연속 출석 확인
-                yesterday = (datetime.now(KST) - timedelta(days=1)).strftime('%Y-%m-%d')
-                if last_attendance and last_attendance.strftime('%Y-%m-%d') == yesterday:
-                    streak = current_streak + 1
-                else:
-                    streak = 1
-            else:
-                # 새로운 사용자
-                current_money = 0
-                streak = 1
-
-            # 출석 순서 확인
-            cur.execute('''
-                SELECT COUNT(*) FROM attendance 
-                WHERE last_attendance::date = %s AND user_id != %s
-            ''', (today, user_id))
-            attendance_order = cur.fetchone()[0] + 1
-
-            # 출석 정보 업데이트
-            cur.execute('''
-                            INSERT INTO attendance (user_id, last_attendance, streak)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (user_id) DO UPDATE 
-                            SET last_attendance = %s, 
-                                streak = %s
-                        ''', (user_id, today, streak, today, streak))
-
-            cur.execute('''
-                            INSERT INTO user_money (user_id, money)
-                            Values (%s, %s)
-                            On CONFLICT (user_id) DO UPDATE
-                            SET money = user_money.money + 10
-                        ''', (user_id, current_money))
-
-            conn.commit()
-
-            # 출석 메시지 전송
-            await message.channel.send(
-                f"🎉 {message.author.mention}님 출석하셨습니다!\n"
-                f"오늘 {attendance_order}번째 출석이에요.\n"
-                f"현재 {streak}일 연속 출석 중입니다!\n"
-                f"💰 출석 보상 10원이 지급되었습니다."
+            
+            # 출석 처리
+            result = await execute_query(
+                '''
+                INSERT INTO user_attendance (user_id, attendance_count, last_attendance, streak_count)
+                VALUES ($1, 1, $2, 1)
+                ON CONFLICT (user_id) DO UPDATE
+                SET attendance_count = user_attendance.attendance_count + 1,
+                    last_attendance = $2,
+                    streak_count = CASE 
+                        WHEN DATE(user_attendance.last_attendance) = $2 - INTERVAL '1 day'
+                        THEN user_attendance.streak_count + 1
+                        ELSE 1
+                    END
+                RETURNING attendance_count, streak_count
+                ''',
+                (user_id, today)
             )
-
+            
+            if result:
+                attendance_count = result[0]['attendance_count']
+                streak_count = result[0]['streak_count']
+                
+                # 보상 지급
+                reward = 100 + (streak_count * 10)
+                await update_balance(user_id, reward)
+                
+                await message.channel.send(
+                    f"{message.author.mention}님 출석 완료! "
+                    f"현재 출석 횟수: {attendance_count}회, "
+                    f"연속 출석: {streak_count}일\n"
+                    f"보상: {reward}원"
+                )
+                
+                self.update_message_history(user_id, today)
+                self.update_attendance_cache(user_id, today)
         except Exception as e:
-            print(f"출석 처리 중 오류 발생: {e}", flush=True)
-            await message.channel.send("출석 처리 중 오류가 발생했습니다. 다시 시도해주세요.", delete_after=3)
-
-        finally:
-            if conn:
-                conn.close()
+            print(f"출석 처리 오류: {e}")
 
 
 bot = AttendanceBot()

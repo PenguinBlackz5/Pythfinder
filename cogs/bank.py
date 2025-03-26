@@ -1,23 +1,18 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import sqlite3
-from database_manager import get_db_connection
+from typing import Optional, List
+from database_manager import execute_query
 
 from Pythfinder import update_balance
-from typing import Optional
 
 
-async def get_user_ids_from_db():
+async def get_user_ids_from_db() -> List[int]:
     """데이터베이스에서 모든 user_id 가져오기"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id FROM user_money")
-        user_ids = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return user_ids
-    except sqlite3.Error as e:
+        result = await execute_query("SELECT user_id FROM user_money")
+        return [row['user_id'] for row in result] if result else []
+    except Exception as e:
         print(f"데이터베이스 오류: {e}")
         return []
 
@@ -37,8 +32,6 @@ async def get_user_id_from_str_id(interaction: discord.Interaction, user_name: s
     valid_user_ids = await get_user_ids_from_db()
 
     # 길드의 모든 멤버 중에서 이름과 일치하고 데이터베이스에 존재하는 멤버 찾기
-    for member in interaction.guild.members:
-        print(str(member.id), user_name, valid_user_ids)
     for member in interaction.guild.members:
         if (str(member.id) == user_name and
                 member.id in valid_user_ids):
@@ -79,12 +72,12 @@ class TransferAutocomplete(commands.Cog):
             recipient_id = await get_user_id_from_str_id(interaction, recipient)
 
             if recipient_id is None:
-                await interaction.response.send_message(f"{recipient_id} 해당 사용자를 찾을 수 없습니다.")
+                await interaction.response.send_message(f"{recipient} 해당 사용자를 찾을 수 없습니다.")
                 return
 
             try:
-                update_balance(recipient_id, amount)
-                update_balance(interaction.user.id, -amount)
+                await update_balance(recipient_id, amount)
+                await update_balance(interaction.user.id, -amount)
                 await interaction.response.send_message(f"{amount}원을 송금했습니다.")
             except Exception as e:
                 await interaction.response.send_message(f"송금 중 오류가 발생했습니다: {e}")

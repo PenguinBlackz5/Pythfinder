@@ -1,36 +1,43 @@
 import os
-import psycopg2
-from psycopg2 import Error
-from psycopg2.extras import RealDictCursor
+import asyncpg
+from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# 전역 연결 풀
+_pool: Optional[asyncpg.Pool] = None
 
-# 데이터베이스 연결 함수
-def get_db_connection():
+async def get_db_pool() -> asyncpg.Pool:
+    """데이터베이스 연결 풀을 가져옵니다."""
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(os.getenv('DATABASE_URL'))
+    return _pool
+
+async def get_db_connection() -> Optional[asyncpg.Connection]:
+    """데이터베이스 연결을 가져옵니다."""
     try:
-        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
-        conn.autocommit = True
-        return conn
-    except Error as e:
+        pool = await get_db_pool()
+        return await pool.acquire()
+    except Exception as e:
         print(f"데이터베이스 연결 오류: {e}")
         return None
 
-
-def execute_query(query, params=None):
+async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[List[Dict[str, Any]]]:
     """쿼리를 실행하고 결과를 반환합니다."""
-    conn = get_db_connection()
+    conn = await get_db_connection()
+    if not conn:
+        return None
+    
     try:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            if query.strip().upper().startswith('SELECT'):
-                return cur.fetchall()
-            conn.commit()
+        if query.strip().upper().startswith('SELECT'):
+            return await conn.fetch(query, *params) if params else await conn.fetch(query)
+        else:
+            await conn.execute(query, *params) if params else await conn.execute(query)
             return None
     except Exception as e:
-        conn.rollback()
         print(f"쿼리 실행 오류: {e}")
         raise
     finally:
-        conn.close()
+        await conn.release()
