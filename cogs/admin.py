@@ -54,7 +54,7 @@ class Admin(commands.Cog):
 
                 # 현재 서버의 기존 출석 채널 삭제
                 result = await execute_query(
-                    'DELETE FROM attendance_channels WHERE channel_id = ANY(%s) RETURNING channel_id',
+                    'DELETE FROM attendance_channels WHERE channel_id = ANY($1) RETURNING channel_id',
                     (guild_channels,)
                 )
                 deleted_count = len(result) if result else 0
@@ -131,7 +131,7 @@ class Admin(commands.Cog):
                         streak_count,
                         last_attendance
                     FROM user_attendance
-                    WHERE user_id = ANY(%s)
+                    WHERE user_id = ANY($1)
                     ORDER BY attendance_count DESC
                     ''',
                     (member_ids,)
@@ -152,7 +152,7 @@ class Admin(commands.Cog):
                         user_id,
                         balance
                     FROM user_balance
-                    WHERE user_id = ANY(%s)
+                    WHERE user_id = ANY($1)
                     ORDER BY balance DESC 
                     ''',
                     (member_ids,)

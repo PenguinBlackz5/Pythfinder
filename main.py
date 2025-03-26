@@ -64,7 +64,7 @@ async def update_balance(user_id: int, amount: int) -> bool:
             'SELECT balance FROM user_balance WHERE user_id = $1',
             (user_id,)
         )
-        if not result or result[0]['money'] < -amount:
+        if not result or result[0]['balance'] < -amount:
             return False
             
         await execute_query(
@@ -220,7 +220,7 @@ class ClearAllView(View):
         # 멤버별로 개별 삭제 (더 안정적인 방법)
         deleted_count = 0
         for member_id in member_ids:
-            await execute_query('DELETE FROM user_attendance WHERE user_id = %s RETURNING user_id', (member_id,))
+            await execute_query('DELETE FROM user_attendance WHERE user_id = $1 RETURNING user_id', (member_id,))
 
         # 삭제 후 상태 확인
         total_after = await execute_query('SELECT COUNT(*) FROM user_attendance')
@@ -303,7 +303,7 @@ class RankingView(View):
 
         message += "```"
 
-        await interaction.response.edit_message(content=message, view=None)
+        await interaction.response.edit_message(content=message)
 
     @discord.ui.button(label="2️⃣ 보유 금액 랭킹", style=discord.ButtonStyle.primary)
     async def money_ranking(self, interaction: discord.Interaction, button: Button):
