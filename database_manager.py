@@ -33,9 +33,7 @@ async def execute_query(query: str, params: tuple = None) -> List[Dict[str, Any]
                 result = await cur.fetchall()
                 columns = [desc[0] for desc in cur.description]
                 return [dict(zip(columns, row)) for row in result]
-            else:
-                await conn.commit()
-                return []
+            return []
     finally:
         conn.close()
 

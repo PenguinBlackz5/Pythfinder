@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-from psycopg2 import Error
 from datetime import datetime, timedelta
 import pytz
 from discord.ui import Button, View
@@ -139,7 +138,7 @@ class ResetAttendanceView(View):
                     content="출석 정보가 초기화되었습니다.\n💰 보유 금액은 유지됩니다.",
                     view=None
                 )
-        except Error as e:
+        except Exception as e:
             print(f"출석 정보 초기화 중 오류 발생: {e}")
             await interaction.response.send_message("❌ 출석 정보 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
@@ -173,7 +172,7 @@ class ResetMoneyView(View):
                     content="💰 보유 금액이 0원으로 초기화되었습니다.",
                     view=None
                 )
-        except Error as e:
+        except Exception as e:
             print(f"데이터베이스 오류: {e}")
             await interaction.response.send_message("❌ 잔고 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
