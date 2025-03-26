@@ -40,6 +40,10 @@ async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[
     try:
         if query.strip().upper().startswith('SELECT'):
             return await conn.fetch(query, *params) if params else await conn.fetch(query)
+
+        elif "RETURNING" in query.upper():
+            return await conn.fetch(query, *params) if params else await conn.fetch(query)
+
         else:
             await conn.execute(query, *params) if params else await conn.execute(query)
             return None
