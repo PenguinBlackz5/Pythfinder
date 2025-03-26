@@ -10,7 +10,7 @@ from main import update_balance
 async def get_user_ids_from_db() -> List[int]:
     """데이터베이스에서 모든 user_id 가져오기"""
     try:
-        result = await execute_query("SELECT user_id FROM user_money")
+        result = await execute_query("SELECT user_id FROM user_balance")
         return [row['user_id'] for row in result] if result else []
     except Exception as e:
         print(f"데이터베이스 오류: {e}")

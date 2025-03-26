@@ -61,14 +61,14 @@ async def update_balance(user_id: int, amount: int) -> bool:
     """user_id의 잔고를 amount만큼 업데이트합니다."""
     try:
         result = await execute_query(
-            'SELECT money FROM user_money WHERE user_id = $1',
+            'SELECT balance FROM user_balance WHERE user_id = $1',
             (user_id,)
         )
         if not result or result[0]['money'] < -amount:
             return False
             
         await execute_query(
-            'UPDATE user_money SET money = user_money.money + $1 WHERE user_id = $2',
+            'UPDATE user_balance SET balance = user_balance.balance + $1 WHERE user_id = $2',
             (amount, user_id)
         )
         print(f"{user_id}님의 통장에 {amount}만큼 변동이 생겼습니다.")
@@ -82,7 +82,7 @@ async def check_balance(user_id: int, required_amount: int) -> bool:
     """사용자의 잔액이 요구되는 금액 이상인지 확인합니다."""
     try:
         result = await execute_query(
-            'SELECT money FROM user_money WHERE user_id = $1',
+            'SELECT balance FROM user_balance WHERE user_id = $1',
             (user_id,)
         )
         return bool(result and result[0]['money'] >= required_amount)
@@ -108,7 +108,7 @@ async def reset_money(user_id: int) -> bool:
     """사용자의 잔액을 초기화합니다."""
     try:
         await execute_query(
-            'UPDATE user_money SET money = 0 WHERE user_id = $1',
+            'UPDATE user_balance SET balance = 0 WHERE user_id = $1',
             (user_id,)
         )
         return True
@@ -260,10 +260,10 @@ class RankingView(View):
 
         # 연속 출석 기준 데이터 조회
         results = await execute_query('''
-            SELECT user_id, streak
+            SELECT user_id, streak_count
             FROM user_attendance
-            WHERE streak > 0
-            ORDER BY streak DESC
+            WHERE streak_count > 0
+            ORDER BY streak_count DESC
         ''')
 
         if not results:
@@ -315,10 +315,10 @@ class RankingView(View):
 
         # 보유 금액 기준 데이터 조회
         results = await execute_query('''
-            SELECT user_id, money
-            FROM user_money
-            WHERE money > 0
-            ORDER BY money DESC
+            SELECT user_id, balance
+            FROM user_balance
+            WHERE balance > 0
+            ORDER BY balance DESC
         ''')
 
         if not results:

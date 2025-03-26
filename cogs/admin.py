@@ -150,10 +150,10 @@ class Admin(commands.Cog):
                     '''
                     SELECT
                         user_id,
-                        money
-                    FROM user_money
+                        balance
+                    FROM user_balance
                     WHERE user_id = ANY(%s)
-                    ORDER BY money DESC 
+                    ORDER BY balance DESC 
                     ''',
                     (member_ids,)
                 )
