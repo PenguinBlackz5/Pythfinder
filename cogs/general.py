@@ -1,9 +1,10 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-from Pythfinder import ResetAttendanceView, ResetMoneyView, KST
+from main import ResetAttendanceView, ResetMoneyView, KST
 from database_manager import execute_query
 
 
