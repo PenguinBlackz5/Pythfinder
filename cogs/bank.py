@@ -78,7 +78,7 @@ class TransferAutocomplete(commands.Cog):
             try:
                 await update_balance(recipient_id, amount)
                 await update_balance(interaction.user.id, -amount)
-                await interaction.response.send_message(f"{amount}원을 송금했습니다.")
+                await interaction.response.send_message(f"{recipient}님에게 {amount}원을 송금했습니다.")
             except Exception as e:
                 await interaction.response.send_message(f"송금 중 오류가 발생했습니다: {e}")
 

@@ -96,7 +96,7 @@ async def reset_attendance(user_id: int) -> bool:
     """사용자의 출석 기록을 초기화합니다."""
     try:
         await execute_query(
-            'UPDATE user_attendance SET attendance_count = 0, last_attendance = NULL WHERE user_id = $1',
+            'UPDATE attendance SET attendance_count = 0, last_attendance = NULL WHERE user_id = $1',
             (user_id,)
         )
         return True
@@ -506,6 +506,27 @@ class AttendanceBot(commands.Bot):
     async def setup_hook(self):
         await self.init_database()
         await self.load_attendance_channels()
+        print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
+        print("\n=== cog 파일 로드 시작 ===", flush=True)
+
+        # cogs 폴더에 있는 모든 .py 파일을 불러옴
+        for filename in os.listdir("./cogs"):
+            if filename.endswith(".py"):
+                await self.load_extension(f"cogs.{filename[:-3]}")
+                print(f"✅ {filename} 로드 완료")
+
+        # 슬래시 명령어 동기화
+        try:
+            print("슬래시 명령어 동기화 시작...", flush=True)
+            synced = await self.tree.sync()
+            print(f"동기화된 슬래시 명령어: {len(synced)}개", flush=True)
+
+            # 동기화된 명령어 목록 출력
+            for cmd in synced:
+                print(f"- {cmd.name}", flush=True)
+        except Exception as e:
+            print(f"슬래시 명령어 동기화 중 오류 발생: {e}", flush=True)
+        print("=== 이벤트 핸들러 등록 완료 ===\n", flush=True)
 
     async def on_ready(self):
         print("\n" + "=" * 50, flush=True)
@@ -517,7 +538,7 @@ class AttendanceBot(commands.Bot):
         print(f"처리 중인 메시지 수: {len(self.processing_messages)}", flush=True)
 
         # 봇이 준비되면 출석 채널 다시 로드
-        self.load_attendance_channels()
+        await self.load_attendance_channels()
 
         print("=" * 50 + "\n", flush=True)
 
@@ -525,23 +546,23 @@ class AttendanceBot(commands.Bot):
         """데이터베이스 초기화"""
         try:
             await execute_query('''
-                CREATE TABLE IF NOT EXISTS user_attendance (
+                CREATE TABLE IF NOT EXISTS attendance (
                     user_id BIGINT PRIMARY KEY,
                     attendance_count INTEGER DEFAULT 0,
                     last_attendance TIMESTAMP,
                     streak_count INTEGER DEFAULT 0
                 )
             ''')
-            
+
             await execute_query('''
                 CREATE TABLE IF NOT EXISTS user_money (
                     user_id BIGINT PRIMARY KEY,
                     money INTEGER DEFAULT 0
                 )
             ''')
-            
+
             await execute_query('''
-                CREATE TABLE IF NOT EXISTS attendance_channels (
+                CREATE TABLE IF NOT EXISTS channels (
                     channel_id BIGINT PRIMARY KEY,
                     guild_id BIGINT NOT NULL
                 )
@@ -552,7 +573,7 @@ class AttendanceBot(commands.Bot):
     async def load_attendance_channels(self):
         """출석 채널 목록을 로드합니다."""
         try:
-            result = await execute_query('SELECT channel_id FROM attendance_channels')
+            result = await execute_query('SELECT channel_id FROM channels')
             self.attendance_channels = {row['channel_id'] for row in result}
         except Exception as e:
             print(f"출석 채널 로드 오류: {e}")
@@ -562,7 +583,7 @@ class AttendanceBot(commands.Bot):
         """출석 처리를 수행합니다."""
         try:
             user_id = message.author.id
-            today = datetime.now(KST).date()
+            today = datetime.now(KST).date().__str__()
             
             # 중복 체크
             if self.is_duplicate_message(user_id, today):
@@ -571,14 +592,14 @@ class AttendanceBot(commands.Bot):
             # 출석 처리
             result = await execute_query(
                 '''
-                INSERT INTO user_attendance (user_id, attendance_count, last_attendance, streak_count)
+                INSERT INTO attendance (user_id, attendance_count, last_attendance, streak_count)
                 VALUES ($1, 1, $2, 1)
                 ON CONFLICT (user_id) DO UPDATE
-                SET attendance_count = user_attendance.attendance_count + 1,
+                SET attendance_count = attendance.attendance_count + 1,
                     last_attendance = $2,
                     streak_count = CASE 
-                        WHEN DATE(user_attendance.last_attendance) = $2 - INTERVAL '1 day'
-                        THEN user_attendance.streak_count + 1
+                        WHEN DATE(attendance.last_attendance) = $2 - INTERVAL '1 day'
+                        THEN attendance.streak_count + 1
                         ELSE 1
                     END
                 RETURNING attendance_count, streak_count
@@ -595,10 +616,10 @@ class AttendanceBot(commands.Bot):
                 await update_balance(user_id, reward)
                 
                 await message.channel.send(
-                    f"{message.author.mention}님 출석 완료! "
+                    f"🎉 {message.author.mention}님 출석 완료! "
                     f"현재 출석 횟수: {attendance_count}회, "
                     f"연속 출석: {streak_count}일\n"
-                    f"보상: {reward}원"
+                    f"💰 보상: {reward}원"
                 )
                 
                 self.update_message_history(user_id, today)
