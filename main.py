@@ -430,99 +430,13 @@ class AttendanceBot(commands.Bot):
         print("봇 인스턴스 생성 완료", flush=True)
         sys.stdout.flush()
         self._db_initialized = False
-        self.init_database()
         self.attendance_channels = set()
-        self.load_attendance_channels()
-
-        # 메시지 처리 관련 집합들을 클래스 변수로 초기화
-        self._processing_messages = set()
-        self._message_sent = set()
-        self._attendance_cache = {}
-        self._message_history = {}
-        self._message_lock = {}
 
         print("=== 봇 초기화 완료 ===\n", flush=True)
         sys.stdout.flush()
 
-    @property
-    def processing_messages(self):
-        return self._processing_messages
-
-    @property
-    def message_sent(self):
-        return self._message_sent
-
-    @property
-    def attendance_cache(self):
-        return self._attendance_cache
-
-    @property
-    def message_history(self):
-        return self._message_history
-
-    @property
-    def message_lock(self):
-        return self._message_lock
-
-    def is_message_processed(self, message_id: int) -> bool:
-        """메시지가 이미 처리되었는지 확인합니다."""
-        return message_id in self.processing_messages or message_id in self.message_sent
-
-    def mark_message_as_processed(self, message_id: int):
-        """메시지를 처리 완료로 표시합니다."""
-        self.message_sent.add(message_id)
-        if message_id in self.processing_messages:
-            self.processing_messages.remove(message_id)
-
-    def mark_message_as_processing(self, message_id: int):
-        """메시지를 처리 중으로 표시합니다."""
-        self.processing_messages.add(message_id)
-
-    def clear_processing_message(self, message_id: int):
-        """메시지의 처리 중 상태를 제거합니다."""
-        if message_id in self.processing_messages:
-            self.processing_messages.remove(message_id)
-
-    def update_message_history(self, user_id: int, today: str):
-        """메시지 히스토리를 업데이트합니다."""
-        cache_key = f"{user_id}_{today}"
-        self.message_history[cache_key] = datetime.now(KST)
-
-    def is_duplicate_message(self, user_id: int, today: str) -> bool:
-        """5초 이내의 중복 메시지인지 확인합니다."""
-        cache_key = f"{user_id}_{today}"
-        if cache_key in self.message_history:
-            last_message_time = self.message_history[cache_key]
-            current_time = datetime.now(KST)
-            time_diff = (current_time - last_message_time).total_seconds()
-            return time_diff < 5
-        return False
-
-    def update_attendance_cache(self, user_id: int, today: str):
-        """출석 캐시를 업데이트합니다."""
-        cache_key = f"{user_id}_{today}"
-        self.attendance_cache[cache_key] = True
-
     async def setup_hook(self):
-        await self.init_database()
-        await self.load_attendance_channels()
-
-    async def on_ready(self):
-        print("\n" + "=" * 50, flush=True)
-        print("봇이 준비되었습니다!", flush=True)
-        print(f"봇 이름: {self.user}", flush=True)
-        print(f"봇 ID: {self.user.id}", flush=True)
-        print(f"서버 수: {len(self.guilds)}", flush=True)
-        print(f"캐시된 메시지 수: {len(self.message_sent)}", flush=True)
-        print(f"처리 중인 메시지 수: {len(self.processing_messages)}", flush=True)
-
-        # 봇이 준비되면 출석 채널 다시 로드
-        self.load_attendance_channels()
-
-        print("=" * 50 + "\n", flush=True)
-
-    async def init_database(self):
-        """데이터베이스 초기화"""
+        # 데이터베이스 초기화
         try:
             await execute_query('''
                 CREATE TABLE IF NOT EXISTS user_attendance (
@@ -549,8 +463,7 @@ class AttendanceBot(commands.Bot):
         except Exception as e:
             print(f"데이터베이스 초기화 오류: {e}")
 
-    async def load_attendance_channels(self):
-        """출석 채널 목록을 로드합니다."""
+        # 출석 채널 로드
         try:
             result = await execute_query('SELECT channel_id FROM attendance_channels')
             self.attendance_channels = {row['channel_id'] for row in result}
@@ -558,53 +471,22 @@ class AttendanceBot(commands.Bot):
             print(f"출석 채널 로드 오류: {e}")
             self.attendance_channels = set()
 
-    async def process_attendance(self, message):
-        """출석 처리를 수행합니다."""
-        try:
-            user_id = message.author.id
-            today = datetime.now(KST).date()
-            
-            # 중복 체크
-            if self.is_duplicate_message(user_id, today):
-                return
-            
-            # 출석 처리
-            result = await execute_query(
-                '''
-                INSERT INTO user_attendance (user_id, attendance_count, last_attendance, streak_count)
-                VALUES ($1, 1, $2, 1)
-                ON CONFLICT (user_id) DO UPDATE
-                SET attendance_count = user_attendance.attendance_count + 1,
-                    last_attendance = $2,
-                    streak_count = CASE 
-                        WHEN DATE(user_attendance.last_attendance) = $2 - INTERVAL '1 day'
-                        THEN user_attendance.streak_count + 1
-                        ELSE 1
-                    END
-                RETURNING attendance_count, streak_count
-                ''',
-                (user_id, today)
-            )
-            
-            if result:
-                attendance_count = result[0]['attendance_count']
-                streak_count = result[0]['streak_count']
-                
-                # 보상 지급
-                reward = 100 + (streak_count * 10)
-                await update_balance(user_id, reward)
-                
-                await message.channel.send(
-                    f"{message.author.mention}님 출석 완료! "
-                    f"현재 출석 횟수: {attendance_count}회, "
-                    f"연속 출석: {streak_count}일\n"
-                    f"보상: {reward}원"
-                )
-                
-                self.update_message_history(user_id, today)
-                self.update_attendance_cache(user_id, today)
-        except Exception as e:
-            print(f"출석 처리 오류: {e}")
+        # 모든 cog 로드
+        for filename in os.listdir('./cogs'):
+            if filename.endswith('.py'):
+                await self.load_extension(f'cogs.{filename[:-3]}')
+        
+        # 명령어 동기화
+        await self.tree.sync()
+
+    async def on_ready(self):
+        print("\n" + "=" * 50, flush=True)
+        print("봇이 준비되었습니다!", flush=True)
+        print(f"봇 이름: {self.user}", flush=True)
+        print(f"봇 ID: {self.user.id}", flush=True)
+        print(f"서버 수: {len(self.guilds)}", flush=True)
+
+        print("=" * 50 + "\n", flush=True)
 
 
 bot = AttendanceBot()
