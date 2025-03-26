@@ -214,50 +214,27 @@ class ClearAllView(View):
             )
             return
 
-        conn = get_db_connection()
-        if not conn:
-            await interaction.response.edit_message(content="데이터베이스 연결 실패!", view=None)
-            return
+        # 현재 데이터베이스 상태 확인
+        total_before = await execute_query('SELECT COUNT(*) FROM user_attendance')
 
-        try:
-            cur = conn.cursor()
+        # 멤버별로 개별 삭제 (더 안정적인 방법)
+        deleted_count = 0
+        for member_id in member_ids:
+            await execute_query('DELETE FROM user_attendance WHERE user_id = %s RETURNING user_id', (member_id,))
 
-            # 현재 데이터베이스 상태 확인
-            cur.execute('SELECT COUNT(*) FROM user_attendance')
-            total_before = cur.fetchone()[0]
+        # 삭제 후 상태 확인
+        total_after = await execute_query('SELECT COUNT(*) FROM user_attendance')
 
-            # 멤버별로 개별 삭제 (더 안정적인 방법)
-            deleted_count = 0
-            for member_id in member_ids:
-                cur.execute('DELETE FROM user_attendance WHERE user_id = %s RETURNING user_id', (member_id,))
-                if cur.fetchone():
-                    deleted_count += 1
+        status_message = (
+            f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
+            f"- 서버: {guild.name}\n"
+            f"- 처리된 멤버 수: {len(member_ids)}명\n"
+            f"- 삭제된 데이터 수: {deleted_count}개\n"
+            f"- 전체 레코드 변화: {total_before} → {total_after}"
+        )
 
-            conn.commit()
-
-            # 삭제 후 상태 확인
-            cur.execute('SELECT COUNT(*) FROM user_attendance')
-            total_after = cur.fetchone()[0]
-
-            status_message = (
-                f"✅ 서버의 출석 데이터가 초기화되었습니다.\n"
-                f"- 서버: {guild.name}\n"
-                f"- 처리된 멤버 수: {len(member_ids)}명\n"
-                f"- 삭제된 데이터 수: {deleted_count}개\n"
-                f"- 전체 레코드 변화: {total_before} → {total_after}"
-            )
-
-            print(status_message)  # 디버깅용
-            await interaction.response.edit_message(content=status_message, view=None)
-
-        except Exception as e:
-            print(f"데이터베이스 초기화 중 오류 발생: {e}")
-            await interaction.response.edit_message(
-                content=f"❌ 데이터 초기화 중 오류가 발생했습니다.\n에러: {str(e)}",
-                view=None
-            )
-        finally:
-            conn.close()
+        print(status_message)  # 디버깅용
+        await interaction.response.edit_message(content=status_message, view=None)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.gray)
     async def cancel(self, interaction: discord.Interaction, button: Button):
@@ -281,66 +258,52 @@ class RankingView(View):
             await interaction.response.edit_message(content="데이터베이스 연결 실패!", view=None)
             return
 
-        try:
-            cur = conn.cursor()
+        # 연속 출석 기준 데이터 조회
+        results = await execute_query('''
+            SELECT user_id, streak
+            FROM user_attendance
+            WHERE streak > 0
+            ORDER BY streak DESC
+        ''')
 
-            # 연속 출석 기준 데이터 조회
-            cur.execute('''
-                SELECT user_id, streak
-                FROM user_attendance
-                WHERE streak > 0
-                ORDER BY streak DESC
-            ''')
-
-            results = cur.fetchall()
-
-            if not results:
-                await interaction.response.edit_message(
-                    content="아직 출석 기록이 없습니다!",
-                    view=None
-                )
-                return
-
-            # 동점자 순위 처리
-            ranked_results = []
-            current_rank = 1
-            current_streak = None
-            rank_count = 0
-
-            for user_id, streak in results:
-                if streak != current_streak:
-                    current_rank = rank_count + 1
-                    current_streak = streak
-                rank_count += 1
-                ranked_results.append((current_rank, user_id, streak))
-                if rank_count >= 10:  # 10등까지만 표시
-                    break
-
-            # 메시지 구성
-            message = "🏆 **연속 출석 랭킹 TOP 10**\n\n"
-            message += "```\n"
-            message += "순위  닉네임         연속 출석\n"
-            message += "--------------------------------\n"
-
-            for rank, user_id, streak in ranked_results:
-                member = interaction.guild.get_member(user_id)
-                if member:
-                    name = member.display_name[:10] + "..." if len(
-                        member.display_name) > 10 else member.display_name.ljust(10)
-                    message += f"{str(rank) + '위':4} {name:<13} {streak:>3}일\n"
-
-            message += "```"
-
-            await interaction.response.edit_message(content=message, view=None)
-
-        except Exception as e:
-            print(f"랭킹 조회 중 오류 발생: {e}")
+        if not results:
             await interaction.response.edit_message(
-                content="랭킹 조회 중 오류가 발생했습니다.",
+                content="아직 출석 기록이 없습니다!",
                 view=None
             )
-        finally:
-            conn.close()
+            return
+
+        # 동점자 순위 처리
+        ranked_results = []
+        current_rank = 1
+        current_streak = None
+        rank_count = 0
+
+        for user_id, streak in results:
+            if streak != current_streak:
+                current_rank = rank_count + 1
+                current_streak = streak
+            rank_count += 1
+            ranked_results.append((current_rank, user_id, streak))
+            if rank_count >= 10:  # 10등까지만 표시
+                break
+
+        # 메시지 구성
+        message = "🏆 **연속 출석 랭킹 TOP 10**\n\n"
+        message += "```\n"
+        message += "순위  닉네임         연속 출석\n"
+        message += "--------------------------------\n"
+
+        for rank, user_id, streak in ranked_results:
+            member = interaction.guild.get_member(user_id)
+            if member:
+                name = member.display_name[:10] + "..." if len(
+                    member.display_name) > 10 else member.display_name.ljust(10)
+                message += f"{str(rank) + '위':4} {name:<13} {streak:>3}일\n"
+
+        message += "```"
+
+        await interaction.response.edit_message(content=message, view=None)
 
     @discord.ui.button(label="2️⃣ 보유 금액 랭킹", style=discord.ButtonStyle.primary)
     async def money_ranking(self, interaction: discord.Interaction, button: Button):
@@ -350,66 +313,52 @@ class RankingView(View):
             await interaction.response.edit_message(content="데이터베이스 연결 실패!", view=None)
             return
 
-        try:
-            cur = conn.cursor()
+        # 보유 금액 기준 데이터 조회
+        results = await execute_query('''
+            SELECT user_id, money
+            FROM user_money
+            WHERE money > 0
+            ORDER BY money DESC
+        ''')
 
-            # 보유 금액 기준 데이터 조회
-            cur.execute('''
-                SELECT user_id, money
-                FROM user_money
-                WHERE money > 0
-                ORDER BY money DESC
-            ''')
-
-            results = cur.fetchall()
-
-            if not results:
-                await interaction.response.edit_message(
-                    content="아직 보유 금액 기록이 없습니다!",
-                    view=None
-                )
-                return
-
-            # 동점자 순위 처리
-            ranked_results = []
-            current_rank = 1
-            current_money = None
-            rank_count = 0
-
-            for user_id, money in results:
-                if money != current_money:
-                    current_rank = rank_count + 1
-                    current_money = money
-                rank_count += 1
-                ranked_results.append((current_rank, user_id, money))
-                if rank_count >= 10:  # 10등까지만 표시
-                    break
-
-            # 메시지 구성
-            message = "💰 **보유 금액 랭킹 TOP 10**\n\n"
-            message += "```\n"
-            message += "순위  닉네임         보유 금액\n"
-            message += "--------------------------------\n"
-
-            for rank, user_id, money in ranked_results:
-                member = interaction.guild.get_member(user_id)
-                if member:
-                    name = member.display_name[:10] + "..." if len(
-                        member.display_name) > 10 else member.display_name.ljust(10)
-                    message += f"{str(rank) + '위':4} {name:<13} {money:>6}원\n"
-
-            message += "```"
-
-            await interaction.response.edit_message(content=message, view=None)
-
-        except Exception as e:
-            print(f"랭킹 조회 중 오류 발생: {e}")
+        if not results:
             await interaction.response.edit_message(
-                content="랭킹 조회 중 오류가 발생했습니다.",
+                content="아직 보유 금액 기록이 없습니다!",
                 view=None
             )
-        finally:
-            conn.close()
+            return
+
+        # 동점자 순위 처리
+        ranked_results = []
+        current_rank = 1
+        current_money = None
+        rank_count = 0
+
+        for user_id, money in results:
+            if money != current_money:
+                current_rank = rank_count + 1
+                current_money = money
+            rank_count += 1
+            ranked_results.append((current_rank, user_id, money))
+            if rank_count >= 10:  # 10등까지만 표시
+                break
+
+        # 메시지 구성
+        message = "💰 **보유 금액 랭킹 TOP 10**\n\n"
+        message += "```\n"
+        message += "순위  닉네임         보유 금액\n"
+        message += "--------------------------------\n"
+
+        for rank, user_id, money in ranked_results:
+            member = interaction.guild.get_member(user_id)
+            if member:
+                name = member.display_name[:10] + "..." if len(
+                    member.display_name) > 10 else member.display_name.ljust(10)
+                message += f"{str(rank) + '위':4} {name:<13} {money:>6}원\n"
+
+        message += "```"
+
+        await interaction.response.edit_message(content=message, view=None)
 
 
 class AttendanceBot(commands.Bot):
