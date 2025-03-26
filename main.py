@@ -14,7 +14,7 @@ import time  # 새로 추가
 import sys
 from typing import Optional, List, Dict, Any
 
-from database_manager import get_db_connection, execute_query
+from database_manager import get_db_connection, execute_query, init_database
 
 # 환경변수 로드
 load_dotenv()
