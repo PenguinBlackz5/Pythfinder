@@ -501,29 +501,51 @@ class AttendanceBot(commands.Bot):
         self.attendance_cache[cache_key] = True
 
     async def setup_hook(self):
-        await self.init_database()
-        await self.load_attendance_channels()
-        print("\n=== 이벤트 핸들러 등록 시작 ===", flush=True)
-        print("\n=== cog 파일 로드 시작 ===", flush=True)
-
-        # cogs 폴더에 있는 모든 .py 파일을 불러옴
-        for filename in os.listdir("./cogs"):
-            if filename.endswith(".py"):
-                await self.load_extension(f"cogs.{filename[:-3]}")
-                print(f"✅ {filename} 로드 완료")
-
-        # 슬래시 명령어 동기화
+        """봇이 시작될 때 실행되는 설정"""
+        print("\n=== 봇 초기화 시작 ===", flush=True)
+        
+        # 데이터베이스 초기화
+        print("데이터베이스 초기화 중...", flush=True)
         try:
-            print("슬래시 명령어 동기화 시작...", flush=True)
-            synced = await self.tree.sync()
-            print(f"동기화된 슬래시 명령어: {len(synced)}개", flush=True)
-
-            # 동기화된 명령어 목록 출력
-            for cmd in synced:
-                print(f"- {cmd.name}", flush=True)
+            await init_database()
+            print("데이터베이스 초기화 완료", flush=True)
         except Exception as e:
-            print(f"슬래시 명령어 동기화 중 오류 발생: {e}", flush=True)
-        print("=== 이벤트 핸들러 등록 완료 ===\n", flush=True)
+            print(f"데이터베이스 초기화 오류: {e}", flush=True)
+        
+        # 출석 채널 로드
+        print("출석 채널 로드 중...", flush=True)
+        try:
+            result = await execute_query('SELECT channel_id FROM attendance_channels')
+            if result:
+                self.attendance_channels = {row['channel_id'] for row in result}
+                print(f"업데이트된 출석 채널 목록: {self.attendance_channels}", flush=True)
+            else:
+                print("등록된 채널이 없습니다.", flush=True)
+                self.attendance_channels = set()  # 빈 집합으로 초기화
+        except Exception as e:
+            print(f"출석 채널 로드 오류: {e}", flush=True)
+            self.attendance_channels = set()
+        
+        # cogs 디렉토리에서 모든 cog 파일 로드
+        print("Cog 파일 로드 중...", flush=True)
+        for filename in os.listdir('./cogs'):
+            if filename.endswith('.py'):
+                try:
+                    print(f"로드 중: {filename}", flush=True)
+                    await self.load_extension(f'cogs.{filename[:-3]}')
+                    print(f"로드 완료: {filename}", flush=True)
+                except Exception as e:
+                    print(f"Cog 로드 오류 ({filename}): {e}", flush=True)
+        
+        # 명령어 동기화
+        print("명령어 동기화 중...", flush=True)
+        try:
+            await self.tree.sync()
+            print("명령어 동기화 완료", flush=True)
+        except Exception as e:
+            print(f"명령어 동기화 오류: {e}", flush=True)
+        
+        print("=== 봇 초기화 완료 ===\n", flush=True)
 
     async def on_ready(self):
         print("\n" + "=" * 50, flush=True)
