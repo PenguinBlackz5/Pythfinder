@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import List, Optional
-from database_manager import get_db_connection, execute_query
+from database_manager import execute_query
 
 from Pythfinder import is_admin_or_developer, DEVELOPER_IDS
 
