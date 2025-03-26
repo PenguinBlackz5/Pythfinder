@@ -214,15 +214,39 @@ class Admin(commands.Cog):
 
         @bot.tree.command(name="랭킹", description="서버의 출석/보유금액 랭킹을 확인합니다.")
         async def check_ranking(interaction: discord.Interaction):
-            view = RankingView(interaction.user.id)
-            embed = discord.Embed(
-                title="📊 랭킹 확인",
-                description="확인하고 싶은 랭킹을 선택해주세요!\n\n"
-                            "1️⃣ 출석 랭킹: 연속 출석 일수 기준 TOP 10\n"
-                            "2️⃣ 보유 금액 랭킹: 보유 금액 기준 TOP 10",
-                color=0x00ff00
-            )
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            """출석/보유금액 랭킹을 확인합니다."""
+            try:
+                # 뷰 생성
+                view = RankingView(interaction.user.id)
+                
+                # 임베드 생성
+                embed = discord.Embed(
+                    title="📊 랭킹 확인",
+                    description="확인하고 싶은 랭킹을 선택해주세요!\n\n"
+                                "1️⃣ 출석 랭킹: 연속 출석 일수 기준 TOP 10\n"
+                                "2️⃣ 보유 금액 랭킹: 보유 금액 기준 TOP 10",
+                    color=0x00ff00
+                )
+
+                # 상호작용 응답
+                try:
+                    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                except discord.NotFound:
+                    # 상호작용이 만료된 경우 followup 사용
+                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                except Exception as e:
+                    print(f"랭킹 명령어 응답 오류: {e}")
+                    try:
+                        await interaction.followup.send("랭킹 정보를 표시하는 중 오류가 발생했습니다.", ephemeral=True)
+                    except:
+                        pass
+
+            except Exception as e:
+                print(f"랭킹 명령어 실행 오류: {e}")
+                try:
+                    await interaction.followup.send("랭킹 정보를 가져오는 중 오류가 발생했습니다.", ephemeral=True)
+                except:
+                    pass
 
         @bot.tree.command(name="클리어올캐시", description="⚠️ 이 서버의 모든 출석 데이터를 초기화합니다. (개발자 전용)")
         async def clear_all_cache(interaction: discord.Interaction):
