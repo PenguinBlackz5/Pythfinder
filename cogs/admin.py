@@ -109,7 +109,12 @@ class Admin(commands.Cog):
                     description="이 명령어는 개발자만 사용할 수 있습니다!",
                     color=0xff0000
                 )
-                await interaction.response.send_message(embed=error_embed, ephemeral=True)
+                try:
+                    await interaction.response.send_message(embed=error_embed, ephemeral=True)
+                except discord.NotFound:
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                except Exception as e:
+                    print(f"권한 오류 메시지 전송 실패: {e}")
                 return
 
             try:
@@ -133,7 +138,12 @@ class Admin(commands.Cog):
                 )
 
                 if not attendance_results:
-                    await interaction.response.send_message("아직 출석 기록이 없습니다.", ephemeral=True)
+                    try:
+                        await interaction.response.send_message("아직 출석 기록이 없습니다.", ephemeral=True)
+                    except discord.NotFound:
+                        await interaction.followup.send("아직 출석 기록이 없습니다.", ephemeral=True)
+                    except Exception as e:
+                        print(f"출석 기록 없음 메시지 전송 실패: {e}")
                     return
 
                 user_money_results = await execute_query(
@@ -142,7 +152,7 @@ class Admin(commands.Cog):
                         user_id,
                         money
                     FROM user_money
-                    where user_id = Any($1)
+                    WHERE user_id = ANY(%s)
                     ORDER BY money DESC 
                     ''',
                     (member_ids,)
@@ -170,6 +180,7 @@ class Admin(commands.Cog):
                         })
 
                 registered_members = len(attendance_results)
+                today = datetime.now(KST).strftime('%Y-%m-%d')
                 today_attendance = sum(
                     1 for row in (attendance_results or [])
                     if row.get("attendance_date") and row["attendance_date"].strftime('%Y-%m-%d') == today)
@@ -202,15 +213,28 @@ class Admin(commands.Cog):
                 stats_text += f"전체 보유 금액: {total_money:,}원"
                 embed.add_field(name="📈 통계", value=stats_text, inline=False)
 
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                try:
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                except discord.NotFound:
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                except Exception as e:
+                    print(f"출석 현황 메시지 전송 실패: {e}")
+                    try:
+                        await interaction.followup.send("출석 현황을 표시하는 중 오류가 발생했습니다.", ephemeral=True)
+                    except:
+                        pass
 
             except Exception as e:
+                print(f"출석 현황 조회 중 오류 발생: {e}")
                 error_embed = discord.Embed(
                     title="❌ 오류",
                     description=f"출석 현황 조회 중 오류가 발생했습니다.\n오류: {str(e)}",
                     color=0xff0000
                 )
-                await interaction.response.send_message(embed=error_embed, ephemeral=True)
+                try:
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                except:
+                    pass
 
         @bot.tree.command(name="랭킹", description="서버의 출석/보유금액 랭킹을 확인합니다.")
         async def check_ranking(interaction: discord.Interaction):
