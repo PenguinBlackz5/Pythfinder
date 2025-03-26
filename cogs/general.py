@@ -22,7 +22,7 @@ class General(commands.Cog):
                 today = datetime.now(KST).strftime('%Y-%m-%d')
 
                 result = await execute_query(
-                    'SELECT last_attendance, streak_count FROM attendance WHERE user_id = $1',
+                    'SELECT last_attendance, streak_count FROM user_attendance WHERE user_id = %s',
                     (user_id,)
                 )
 
@@ -89,7 +89,7 @@ class General(commands.Cog):
 
             try:
                 result = await execute_query(
-                    'SELECT money FROM user_money WHERE user_id = $1',
+                    'SELECT balance FROM user_balance WHERE user_id = %s',
                     (user_id,)
                 )
 

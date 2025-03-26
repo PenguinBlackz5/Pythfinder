@@ -54,7 +54,7 @@ class Admin(commands.Cog):
 
                 # 현재 서버의 기존 출석 채널 삭제
                 result = await execute_query(
-                    'DELETE FROM channels WHERE channel_id = ANY($1) RETURNING channel_id',
+                    'DELETE FROM attendance_channels WHERE channel_id = ANY(%s) RETURNING channel_id',
                     (guild_channels,)
                 )
                 deleted_count = len(result) if result else 0
@@ -62,7 +62,7 @@ class Admin(commands.Cog):
 
                 # 새로운 채널 등록
                 await execute_query(
-                    'INSERT INTO channels (channel_id, guild_id) VALUES ($1, $2)',
+                    'INSERT INTO attendance_channels (channel_id, guild_id) VALUES (%s, %s)',
                     (channel_id, interaction.guild_id)
                 )
 
@@ -125,8 +125,8 @@ class Admin(commands.Cog):
                         attendance_count,
                         streak_count,
                         last_attendance
-                    FROM attendance
-                    WHERE user_id = ANY($1)
+                    FROM user_attendance
+                    WHERE user_id = ANY(%s)
                     ORDER BY attendance_count DESC
                     ''',
                     (member_ids,)
