@@ -67,7 +67,7 @@ class Admin(commands.Cog):
                 )
 
                 # 메모리 캐시 업데이트
-                result = await execute_query('SELECT channel_id FROM channels')
+                result = await execute_query('SELECT channel_id FROM attendance_channels')
                 if result:
                     bot.attendance_channels = {row['channel_id'] for row in result}
                     print(f"업데이트된 출석 채널 목록: {bot.attendance_channels}", flush=True)

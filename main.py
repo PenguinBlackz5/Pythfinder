@@ -13,7 +13,7 @@ import time  # 새로 추가
 import sys
 from typing import Optional, List, Dict, Any
 
-from database_manager import get_db_connection, execute_query, init_database
+from database_manager import get_db_connection, execute_query
 
 # 환경변수 로드
 load_dotenv()
@@ -95,7 +95,7 @@ async def reset_attendance(user_id: int) -> bool:
     """사용자의 출석 기록을 초기화합니다."""
     try:
         await execute_query(
-            'UPDATE attendance SET attendance_count = 0, last_attendance = NULL WHERE user_id = $1',
+            'UPDATE user_attendance SET attendance_count = 0, last_attendance = NULL WHERE user_id = $1',
             (user_id,)
         )
         return True
@@ -223,20 +223,20 @@ class ClearAllView(View):
             cur = conn.cursor()
 
             # 현재 데이터베이스 상태 확인
-            cur.execute('SELECT COUNT(*) FROM attendance')
+            cur.execute('SELECT COUNT(*) FROM user_attendance')
             total_before = cur.fetchone()[0]
 
             # 멤버별로 개별 삭제 (더 안정적인 방법)
             deleted_count = 0
             for member_id in member_ids:
-                cur.execute('DELETE FROM attendance WHERE user_id = %s RETURNING user_id', (member_id,))
+                cur.execute('DELETE FROM user_attendance WHERE user_id = %s RETURNING user_id', (member_id,))
                 if cur.fetchone():
                     deleted_count += 1
 
             conn.commit()
 
             # 삭제 후 상태 확인
-            cur.execute('SELECT COUNT(*) FROM attendance')
+            cur.execute('SELECT COUNT(*) FROM user_attendance')
             total_after = cur.fetchone()[0]
 
             status_message = (
@@ -287,7 +287,7 @@ class RankingView(View):
             # 연속 출석 기준 데이터 조회
             cur.execute('''
                 SELECT user_id, streak
-                FROM attendance
+                FROM user_attendance
                 WHERE streak > 0
                 ORDER BY streak DESC
             ''')
@@ -498,7 +498,7 @@ class AttendanceBot(commands.Bot):
         # 데이터베이스 초기화
         print("데이터베이스 초기화 중...", flush=True)
         try:
-            await self.init_database()
+            # await self.init_database()
             print("데이터베이스 초기화 완료", flush=True)
         except Exception as e:
             print(f"데이터베이스 초기화 오류: {e}", flush=True)
@@ -546,38 +546,10 @@ class AttendanceBot(commands.Bot):
 
         print("=" * 50 + "\n", flush=True)
 
-    async def init_database(self):
-        """데이터베이스 초기화"""
-        try:
-            await execute_query('''
-                CREATE TABLE IF NOT EXISTS attendance (
-                    user_id BIGINT PRIMARY KEY,
-                    attendance_count INTEGER DEFAULT 0,
-                    last_attendance TIMESTAMP,
-                    streak_count INTEGER DEFAULT 0
-                )
-            ''')
-
-            await execute_query('''
-                CREATE TABLE IF NOT EXISTS user_money (
-                    user_id BIGINT PRIMARY KEY,
-                    money INTEGER DEFAULT 0
-                )
-            ''')
-
-            await execute_query('''
-                CREATE TABLE IF NOT EXISTS channels (
-                    channel_id BIGINT PRIMARY KEY,
-                    guild_id BIGINT NOT NULL
-                )
-            ''')
-        except Exception as e:
-            print(f"데이터베이스 초기화 오류: {e}")
-
     async def load_attendance_channels(self):
         """출석 채널 목록을 로드합니다."""
         try:
-            result = await execute_query('SELECT channel_id FROM channels')
+            result = await execute_query('SELECT channel_id FROM attendance_channels')
             self.attendance_channels = {row['channel_id'] for row in result}
         except Exception as e:
             print(f"출석 채널 로드 오류: {e}")
@@ -596,14 +568,14 @@ class AttendanceBot(commands.Bot):
             # 출석 처리
             result = await execute_query(
                 '''
-                INSERT INTO attendance (user_id, attendance_count, last_attendance, streak_count)
+                INSERT INTO user_attendance (user_id, attendance_count, last_attendance, streak_count)
                 VALUES ($1, 1, $2, 1)
                 ON CONFLICT (user_id) DO UPDATE
-                SET attendance_count = attendance.attendance_count + 1,
+                SET attendance_count = user_attendance.attendance_count + 1,
                     last_attendance = $2,
                     streak_count = CASE 
-                        WHEN DATE(attendance.last_attendance) = $2 - INTERVAL '1 day'
-                        THEN attendance.streak_count + 1
+                        WHEN DATE(user_attendance.last_attendance) = $2 - INTERVAL '1 day'
+                        THEN user_attendance.streak_count + 1
                         ELSE 1
                     END
                 RETURNING attendance_count, streak_count
