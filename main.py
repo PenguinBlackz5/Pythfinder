@@ -436,42 +436,11 @@ class AttendanceBot(commands.Bot):
         sys.stdout.flush()
 
     async def setup_hook(self):
+        """봇이 시작될 때 실행되는 설정"""
         # 데이터베이스 초기화
-        try:
-            await execute_query('''
-                CREATE TABLE IF NOT EXISTS user_attendance (
-                    user_id BIGINT PRIMARY KEY,
-                    attendance_count INTEGER DEFAULT 0,
-                    last_attendance TIMESTAMP,
-                    streak_count INTEGER DEFAULT 0
-                )
-            ''')
-            
-            await execute_query('''
-                CREATE TABLE IF NOT EXISTS user_money (
-                    user_id BIGINT PRIMARY KEY,
-                    money INTEGER DEFAULT 0
-                )
-            ''')
-            
-            await execute_query('''
-                CREATE TABLE IF NOT EXISTS attendance_channels (
-                    channel_id BIGINT PRIMARY KEY,
-                    guild_id BIGINT NOT NULL
-                )
-            ''')
-        except Exception as e:
-            print(f"데이터베이스 초기화 오류: {e}")
-
-        # 출석 채널 로드
-        try:
-            result = await execute_query('SELECT channel_id FROM attendance_channels')
-            self.attendance_channels = {row['channel_id'] for row in result}
-        except Exception as e:
-            print(f"출석 채널 로드 오류: {e}")
-            self.attendance_channels = set()
-
-        # 모든 cog 로드
+        await init_database()
+        
+        # cogs 디렉토리에서 모든 cog 파일 로드
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 await self.load_extension(f'cogs.{filename[:-3]}')

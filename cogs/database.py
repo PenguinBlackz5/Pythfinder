@@ -3,8 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from typing import List, Optional
 from database_manager import execute_query
-
-from Pythfinder import is_admin_or_developer, DEVELOPER_IDS
+from main import is_admin_or_developer, DEVELOPER_IDS
 
 
 async def fetch_all_data(table_name: str) -> str:
