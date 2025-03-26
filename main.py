@@ -414,32 +414,23 @@ class RankingView(View):
 
 class AttendanceBot(commands.Bot):
     def __init__(self):
-        print("\n=== 봇 초기화 시작 ===", flush=True)
-        sys.stdout.flush()
-        # 필요한 모든 인텐트 추가
+        # 기본 인텐트 설정
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        intents.guilds = True  # 서버 정보 접근 권한 추가
-        intents.guild_messages = True  # 서버 메시지 접근 권한 추가
+        intents.guilds = True
+        intents.guild_messages = True
+        
+        # 부모 클래스 초기화
         super().__init__(command_prefix='!', intents=intents)
-
-        print("봇 인스턴스 생성 완료", flush=True)
-        sys.stdout.flush()
-        self._db_initialized = False
-        self.init_database()
+        
+        # 기본 속성 초기화
         self.attendance_channels = set()
-        self.load_attendance_channels()
-
-        # 메시지 처리 관련 집합들을 클래스 변수로 초기화
         self._processing_messages = set()
         self._message_sent = set()
         self._attendance_cache = {}
         self._message_history = {}
         self._message_lock = {}
-
-        print("=== 봇 초기화 완료 ===\n", flush=True)
-        sys.stdout.flush()
 
     @property
     def processing_messages(self):
@@ -507,7 +498,7 @@ class AttendanceBot(commands.Bot):
         # 데이터베이스 초기화
         print("데이터베이스 초기화 중...", flush=True)
         try:
-            await init_database()
+            await self.init_database()
             print("데이터베이스 초기화 완료", flush=True)
         except Exception as e:
             print(f"데이터베이스 초기화 오류: {e}", flush=True)
@@ -515,16 +506,10 @@ class AttendanceBot(commands.Bot):
         # 출석 채널 로드
         print("출석 채널 로드 중...", flush=True)
         try:
-            result = await execute_query('SELECT channel_id FROM attendance_channels')
-            if result:
-                self.attendance_channels = {row['channel_id'] for row in result}
-                print(f"업데이트된 출석 채널 목록: {self.attendance_channels}", flush=True)
-            else:
-                print("등록된 채널이 없습니다.", flush=True)
-                self.attendance_channels = set()  # 빈 집합으로 초기화
+            await self.load_attendance_channels()
+            print("출석 채널 로드 완료", flush=True)
         except Exception as e:
             print(f"출석 채널 로드 오류: {e}", flush=True)
-            self.attendance_channels = set()
         
         # cogs 디렉토리에서 모든 cog 파일 로드
         print("Cog 파일 로드 중...", flush=True)
