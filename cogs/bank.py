@@ -4,7 +4,7 @@ from discord import app_commands
 from typing import Optional, List
 from database_manager import execute_query
 
-from Pythfinder import update_balance
+from main import update_balance
 
 
 async def get_user_ids_from_db() -> List[int]:

@@ -4,7 +4,7 @@ from discord import app_commands
 import random
 import asyncio
 from typing import Dict, Tuple, List, Optional
-from Pythfinder import update_balance, check_balance
+from main import update_balance, check_balance
 from database_manager import execute_query
 
 
