@@ -10,21 +10,21 @@ CREATE TABLE IF NOT EXISTS example (
 
 -- 다른 테이블들도 필요에 따라 추가하세요 
 
--- attendance 테이블 생성
-CREATE TABLE IF NOT EXISTS attendance (
+-- user_attendance 테이블 생성
+CREATE TABLE IF NOT EXISTS user_attendance (
     user_id BIGINT PRIMARY KEY,
     last_attendance TIMESTAMP,
-    streak INTEGER DEFAULT 0,
-    money INTEGER DEFAULT 0
+    streak_count INTEGER DEFAULT 0,
+    attendance_count INTEGER DEFAULT 0
 );
 
--- channels 테이블 생성
-CREATE TABLE IF NOT EXISTS channels (
+-- attendance_channels 테이블 생성
+CREATE TABLE IF NOT EXISTS attendance_channels (
     channel_id BIGINT PRIMARY KEY
 );
 
--- user_money 테이블 생성
-CREATE TABLE IF NOT EXISTS user_money (
+-- user_balance 테이블 생성
+CREATE TABLE IF NOT EXISTS user_balance (
     user_id BIGINT PRIMARY KEY,
-    money INTEGER DEFAULT 0
+    balance INTEGER DEFAULT 0
 )

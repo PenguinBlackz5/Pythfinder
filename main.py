@@ -508,7 +508,7 @@ class AttendanceBot(commands.Bot):
         print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
         print(f"메시지 ID: {message.id}", flush=True)
         print(f"작성자: {message.author.name}", flush=True)
-        print(f"메시지 내용: {message.content}", flush=True)  # 메시지 내용 추가
+        print(f"메시지 내용: {message.content}", flush=True)
 
         # DM 채널인 경우 명령어만 처리하고 종료
         if isinstance(message.channel, discord.DMChannel):
@@ -553,8 +553,15 @@ class AttendanceBot(commands.Bot):
             # 사용자 ID와 오늘 날짜로 캐시 키 생성
             user_id = message.author.id
             today = datetime.now(KST).strftime('%Y-%m-%d')
-            today = datetime.strptime(today, "%Y-%m-%d").date()
+            today_date = datetime.strptime(today, "%Y-%m-%d").date()
             cache_key = f"{user_id}_{today}"
+
+            # 중복 출석 체크
+            if self.is_duplicate_message(user_id, today):
+                print(f"중복 출석 감지: {message.author.name}", flush=True)
+                await message.channel.send(f"❌ {message.author.mention}님은 이미 오늘 출석하셨습니다!")
+                self.mark_message_as_processed(message.id)
+                return
 
             # 출석 처리
             result = await execute_query(
@@ -562,16 +569,19 @@ class AttendanceBot(commands.Bot):
                 INSERT INTO user_attendance (user_id, attendance_count, last_attendance, streak_count)
                 VALUES ($1, 1, $2, 1)
                 ON CONFLICT (user_id) DO UPDATE
-                SET attendance_count = user_attendance.attendance_count + 1,
+                SET 
+                    attendance_count = user_attendance.attendance_count + 1,
                     last_attendance = $2,
                     streak_count = CASE 
-                        WHEN DATE(user_attendance.last_attendance) = $2 - INTERVAL '1 day'
+                        WHEN DATE(user_attendance.last_attendance) = DATE($2 - INTERVAL '1 day')
                         THEN user_attendance.streak_count + 1
+                        WHEN DATE(user_attendance.last_attendance) = DATE($2)
+                        THEN user_attendance.streak_count
                         ELSE 1
                     END
                 RETURNING attendance_count, streak_count
                 ''',
-                (user_id, today)
+                (user_id, today_date)
             )
 
             if result:
@@ -584,9 +594,11 @@ class AttendanceBot(commands.Bot):
 
                 # 출석 순서 확인
                 result = await execute_query('''
-                                SELECT COUNT(*) AS count FROM user_attendance
-                                WHERE last_attendance::date = $1 AND user_id != $2
-                            ''', (today, user_id))
+                    SELECT COUNT(*) AS count 
+                    FROM user_attendance
+                    WHERE DATE(last_attendance) = DATE($1) 
+                    AND user_id != $2
+                ''', (today_date, user_id))
 
                 attendance_order = result[0]["count"] + 1
 
@@ -598,12 +610,14 @@ class AttendanceBot(commands.Bot):
                     f"💰 보상: {reward}원"
                 )
 
-                self.update_message_history(user_id, today.strftime('%Y-%m-%d'))
-                self.update_attendance_cache(user_id, today.strftime('%Y-%m-%d'))
+                self.update_message_history(user_id, today)
+                self.update_attendance_cache(user_id, today)
+                self.mark_message_as_processed(message.id)
             else:
-                print(result)
+                print("출석 처리 실패", flush=True)
         except Exception as e:
-            print(f"출석 처리 오류: {e}")
+            print(f"출석 처리 오류: {e}", flush=True)
+            self.clear_processing_message(message.id)
 
 
 bot = AttendanceBot()
