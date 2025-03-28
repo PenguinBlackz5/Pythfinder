@@ -435,6 +435,14 @@ class AttendanceBot(commands.Bot):
             return time_diff < 5
         return False
 
+    def is_duplicate_message_in_day(self, user_id: int, today: str) -> bool:
+        """오늘 이미 메시지를 보냈는지 확인합니다."""
+        cache_key = f"{user_id}_{today}"
+        if cache_key in self.message_history:
+            return True  # 오늘 이미 메시지를 보냈다면 True
+        self.message_history[cache_key] = datetime.now(KST)
+        return False  # 오늘 처음 보내는 메시지라면 False
+
     def update_attendance_cache(self, user_id: int, today: str):
         """출석 캐시를 업데이트합니다."""
         cache_key = f"{user_id}_{today}"
@@ -557,7 +565,7 @@ class AttendanceBot(commands.Bot):
             cache_key = f"{user_id}_{today}"
 
             # 중복 출석 체크
-            if self.is_duplicate_message(user_id, today):
+            if self.is_duplicate_message_in_day(user_id, today):
                 print(f"중복 출석 감지: {message.author.name}", flush=True)
                 await message.channel.send(f"❌ {message.author.mention}님은 이미 오늘 출석하셨습니다!")
                 self.mark_message_as_processed(message.id)
