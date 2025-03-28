@@ -163,14 +163,14 @@ class IndianPokerView(discord.ui.View):
         # 공개된 카드 정보 문자열 생성
         revealed_cards_text = "추가로 공개된 카드:\n"
         for i, (user_card, bot_card) in enumerate(self.revealed_cards, 1):
-            revealed_cards_text += f"라운드 {i}: 당신의 미공개 오픈 카드들: **{user_card}**, 봇의 미공개 히든 카드들: **{bot_card}**\n"
+            revealed_cards_text += f"라운드 {i}: 당신의 미공개 오픈 카드: **{user_card}**, 봇의 미공개 히든 카드: **{bot_card}**\n"
 
         game_embed = discord.Embed(
             title="🎮 인디언 포커 - 추가 정보",
             description=f"당신의 히든 카드: **{self.user_hidden}**\n"
                       f"봇의 오픈 카드: **{self.bot_open}**\n\n"
                       f"{revealed_cards_text}\n"
-                      f"현재 배당률: **{multiplier:.1f}배** (베팅 시 {math.ceil(bet_amount * multiplier)}원)",
+                      f"현재 배당률: **{multiplier:.3f}배** (베팅 시 {math.ceil(bet_amount * multiplier)}원)",
             color=0x00ff00
         )
 
