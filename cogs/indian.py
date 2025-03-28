@@ -36,7 +36,7 @@ class IndianPoker(commands.Cog):
         return user_reveal, bot_reveal
 
     @bot.tree.command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
-    async def indian_poker(interaction: discord.Interaction, bet_amount: int):
+    async def indian_poker(self, interaction: discord.Interaction, bet_amount: int):
         if bet_amount < 1:
             error_embed = discord.Embed(
                 title="❌ 오류",
