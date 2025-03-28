@@ -37,9 +37,9 @@ class IndianPoker(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.bot.tree.add_command(self.indian_poker)
+        await self.bot.tree.sync()
 
-    @commands.slash_command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
+    @commands.hybrid_command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
     async def indian_poker(self, interaction: discord.Interaction, bet_amount: int):
         if bet_amount < 1:
             error_embed = discord.Embed(
