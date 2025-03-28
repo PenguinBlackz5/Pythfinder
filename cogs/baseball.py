@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import random
 import asyncio
+import math
 from typing import Dict, Tuple
 from main import update_balance
 from database_manager import execute_query
@@ -122,7 +123,7 @@ class Baseball(commands.Cog):
 
                     if strikes == 3:
                         # 승리 금액 계산식
-                        winnings = round(bet_amount * multiplier)  # 소수점 일의자리에서 반올림
+                        winnings = math.ceil(bet_amount * multiplier)  # round() 대신 math.ceil() 사용
 
                         try:
                             # 봇의 잔고에서 차감하고 유저에게 지급
