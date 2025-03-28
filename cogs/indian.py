@@ -136,7 +136,7 @@ class IndianPokerView(discord.ui.View):
         self.bet_count = 0
 
     @discord.ui.button(label="베팅", style=discord.ButtonStyle.primary)
-    async def bet(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def bet(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("다른 사람의 게임에 참여할 수 없습니다.", ephemeral=True)
 
@@ -173,7 +173,7 @@ class IndianPokerView(discord.ui.View):
         await interaction.response.edit_message(embed=game_embed, view=self)
 
     @discord.ui.button(label="진행", style=discord.ButtonStyle.success)
-    async def proceed(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def proceed(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("다른 사람의 게임에 참여할 수 없습니다.", ephemeral=True)
 
@@ -218,7 +218,7 @@ class IndianPokerView(discord.ui.View):
         await interaction.response.edit_message(embed=result_embed, view=self)
 
     @discord.ui.button(label="포기", style=discord.ButtonStyle.danger)
-    async def fold(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def fold(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("다른 사람의 게임에 참여할 수 없습니다.", ephemeral=True)
 
