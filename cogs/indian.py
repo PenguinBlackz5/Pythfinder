@@ -35,25 +35,25 @@ class IndianPoker(commands.Cog):
         bot_hidden_pool.remove(bot_reveal)
         return user_reveal, bot_reveal
 
-    @commands.slash_command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
-    async def indian_poker(self, ctx: discord.ApplicationContext, bet_amount: int):
+    @bot.tree.command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
+    async def indian_poker(interaction: discord.Interaction, bet_amount: int):
         if bet_amount < 1:
             error_embed = discord.Embed(
                 title="❌ 오류",
                 description="베팅 금액은 최소 1원 이상이어야 합니다.",
                 color=0xff0000
             )
-            return await ctx.respond(embed=error_embed, ephemeral=True)
+            return await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
         # 베팅금 차감
         try:
-            if not await update_balance(ctx.author.id, -bet_amount):
+            if not await update_balance(interaction.user.id, -bet_amount):
                 error_embed = discord.Embed(
                     title="❌ 오류",
                     description="보유 금액이 부족합니다!",
                     color=0xff0000
                 )
-                return await ctx.respond(embed=error_embed, ephemeral=True)
+                return await interaction.response.send_message(embed=error_embed, ephemeral=True)
         except Exception as e:
             print(f"베팅금 차감 중 오류 발생: {e}")
             error_embed = discord.Embed(
@@ -61,7 +61,7 @@ class IndianPoker(commands.Cog):
                 description="베팅금 차감 중 오류가 발생했습니다.",
                 color=0xff0000
             )
-            return await ctx.respond(embed=error_embed, ephemeral=True)
+            return await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
         # 게임 초기화
         user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool = self.generate_card_pools()
@@ -69,7 +69,7 @@ class IndianPoker(commands.Cog):
         bot_open, bot_hidden = self.draw_cards(bot_open_pool, bot_hidden_pool)
         multiplier = 1.0
 
-        self.active_games[ctx.author.id] = (user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool, bet_amount, multiplier)
+        self.active_games[interaction.user.id] = (user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool, bet_amount, multiplier)
 
         # 게임 시작 메시지
         game_embed = discord.Embed(
@@ -82,8 +82,32 @@ class IndianPoker(commands.Cog):
         )
 
         # 버튼 생성
-        view = IndianPokerView(self, ctx.author.id, user_hidden, bot_open, user_open, bot_hidden, bet_amount)
-        await ctx.respond(embed=game_embed, view=view, ephemeral=True)
+        view = IndianPokerView(self, interaction.user.id, user_hidden, bot_open, user_open, bot_hidden, bet_amount)
+        await interaction.response.send_message(embed=game_embed, view=view, ephemeral=True)
+
+    def generate_card_pools(self) -> Tuple[List[int], List[int], List[int], List[int]]:
+        """카드 풀을 생성하고 초기 카드를 뽑습니다."""
+        user_open_pool = list(range(1, 11))
+        user_hidden_pool = list(range(1, 11))
+        bot_open_pool = list(range(1, 11))
+        bot_hidden_pool = list(range(1, 11))
+        return user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool
+
+    def draw_cards(self, open_pool: List[int], hidden_pool: List[int]) -> Tuple[int, int]:
+        """카드 풀에서 오픈 카드와 히든 카드를 무작위로 뽑습니다."""
+        open_card = random.choice(open_pool)
+        open_pool.remove(open_card)
+        hidden_card = random.choice(hidden_pool)
+        hidden_pool.remove(hidden_card)
+        return open_card, hidden_card
+
+    def reveal_random_cards(self, user_open_pool: List[int], bot_hidden_pool: List[int]) -> Tuple[int, int]:
+        """베팅 시 추가로 공개할 카드를 무작위로 선택합니다."""
+        user_reveal = random.choice(user_open_pool)
+        user_open_pool.remove(user_reveal)
+        bot_reveal = random.choice(bot_hidden_pool)
+        bot_hidden_pool.remove(bot_reveal)
+        return user_reveal, bot_reveal
 
 class IndianPokerView(discord.ui.View):
     def __init__(self, cog: IndianPoker, user_id: int, user_hidden: int, bot_open: int, 
