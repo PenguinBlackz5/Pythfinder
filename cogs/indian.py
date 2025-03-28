@@ -40,24 +40,28 @@ class IndianPoker(commands.Cog):
         await self.bot.tree.sync()
 
     @commands.hybrid_command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
-    async def indian_poker(self, interaction: discord.Interaction, bet_amount: int):
+    async def indian_poker(self, ctx: commands.Context, bet_amount: int):
         if bet_amount < 1:
             error_embed = discord.Embed(
                 title="❌ 오류",
                 description="베팅 금액은 최소 1원 이상이어야 합니다.",
                 color=0xff0000
             )
-            return await interaction.response.send_message(embed=error_embed, ephemeral=True)
+            if isinstance(ctx, discord.Interaction):
+                return await ctx.response.send_message(embed=error_embed, ephemeral=True)
+            return await ctx.send(embed=error_embed)
 
         # 베팅금 차감
         try:
-            if not await update_balance(interaction.user.id, -bet_amount):
+            if not await update_balance(ctx.author.id, -bet_amount):
                 error_embed = discord.Embed(
                     title="❌ 오류",
                     description="보유 금액이 부족합니다!",
                     color=0xff0000
                 )
-                return await interaction.response.send_message(embed=error_embed, ephemeral=True)
+                if isinstance(ctx, discord.Interaction):
+                    return await ctx.response.send_message(embed=error_embed, ephemeral=True)
+                return await ctx.send(embed=error_embed)
         except Exception as e:
             print(f"베팅금 차감 중 오류 발생: {e}")
             error_embed = discord.Embed(
@@ -65,7 +69,9 @@ class IndianPoker(commands.Cog):
                 description="베팅금 차감 중 오류가 발생했습니다.",
                 color=0xff0000
             )
-            return await interaction.response.send_message(embed=error_embed, ephemeral=True)
+            if isinstance(ctx, discord.Interaction):
+                return await ctx.response.send_message(embed=error_embed, ephemeral=True)
+            return await ctx.send(embed=error_embed)
 
         # 게임 초기화
         user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool = self.generate_card_pools()
@@ -73,7 +79,7 @@ class IndianPoker(commands.Cog):
         bot_open, bot_hidden = self.draw_cards(bot_open_pool, bot_hidden_pool)
         multiplier = 1.0
 
-        self.active_games[interaction.user.id] = (user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool, bet_amount, multiplier)
+        self.active_games[ctx.author.id] = (user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool, bet_amount, multiplier)
 
         # 게임 시작 메시지
         game_embed = discord.Embed(
@@ -86,8 +92,11 @@ class IndianPoker(commands.Cog):
         )
 
         # 버튼 생성
-        view = IndianPokerView(self, interaction.user.id, user_hidden, bot_open, user_open, bot_hidden, bet_amount)
-        await interaction.response.send_message(embed=game_embed, view=view, ephemeral=True)
+        view = IndianPokerView(self, ctx.author.id, user_hidden, bot_open, user_open, bot_hidden, bet_amount)
+        if isinstance(ctx, discord.Interaction):
+            await ctx.response.send_message(embed=game_embed, view=view, ephemeral=True)
+        else:
+            await ctx.send(embed=game_embed, view=view)
 
     def generate_card_pools(self) -> Tuple[List[int], List[int], List[int], List[int]]:
         """카드 풀을 생성하고 초기 카드를 뽑습니다."""
