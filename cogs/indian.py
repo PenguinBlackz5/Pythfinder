@@ -134,6 +134,7 @@ class IndianPokerView(discord.ui.View):
         self.bot_hidden = bot_hidden
         self.bet_amount = bet_amount
         self.bet_count = 0
+        self.revealed_cards = []  # 공개된 카드 정보를 저장할 리스트
 
     @discord.ui.button(label="베팅", style=discord.ButtonStyle.primary)
     async def bet(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -153,16 +154,22 @@ class IndianPokerView(discord.ui.View):
         multiplier += 0.125
         user_reveal, bot_reveal = self.cog.reveal_random_cards(user_open_pool, bot_hidden_pool)
         
+        # 공개된 카드 정보 저장
+        self.revealed_cards.append((user_reveal, bot_reveal))
+        
         self.cog.active_games[self.user_id] = (user_open_pool, user_hidden_pool, bot_open_pool, bot_hidden_pool, bet_amount, multiplier)
         self.bet_count += 1
+
+        # 공개된 카드 정보 문자열 생성
+        revealed_cards_text = "추가로 공개된 카드:\n"
+        for i, (user_card, bot_card) in enumerate(self.revealed_cards, 1):
+            revealed_cards_text += f"라운드 {i}: 당신의 미공개 오픈 카드들: **{user_card}**, 봇의 미공개 히든 카드들: **{bot_card}**\n"
 
         game_embed = discord.Embed(
             title="🎮 인디언 포커 - 추가 정보",
             description=f"당신의 히든 카드: **{self.user_hidden}**\n"
                       f"봇의 오픈 카드: **{self.bot_open}**\n\n"
-                      f"추가로 공개된 카드:\n"
-                      f"당신의 가능한 오픈 카드 중 하나: **{user_reveal}**\n"
-                      f"봇의 가능한 히든 카드 중 하나: **{bot_reveal}**\n\n"
+                      f"{revealed_cards_text}\n"
                       f"현재 배당률: **{multiplier:.1f}배** (베팅 시 {math.ceil(bet_amount * multiplier)}원)",
             color=0x00ff00
         )
