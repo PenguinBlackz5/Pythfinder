@@ -29,7 +29,7 @@ class Version(commands.Cog):
         self.local_commit_author = None
 
         # 봇이 시작될 때 로컬 버전 정보 가져오기
-        self.deploy_time = datetime.datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        self.deploy_time = datetime.datetime.now(KST)
         self.get_local_version()
 
     def get_local_version(self):
