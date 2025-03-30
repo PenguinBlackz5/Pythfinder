@@ -14,6 +14,8 @@ import sys
 from typing import Optional, List, Dict, Any
 
 from database_manager import get_db_connection, execute_query
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # 환경변수 로드
 load_dotenv()
@@ -36,7 +38,7 @@ def run_flask():
 # 한국 시간대 설정
 KST = pytz.timezone('Asia/Seoul')
 
-# 상단에 개발자 ID 리스트 추가
+# 개발자 ID 리스트
 DEVELOPER_IDS = [667375690710122526, 927476644002803742]  # 여기에 개발자의 디스코드 ID를 넣으세요
 
 
@@ -361,6 +363,31 @@ class RankingView(View):
         await interaction.response.edit_message(content=message, view=None)
 
 
+async def is_duplicate_message_in_day(user_id: int) -> bool:
+    """오늘 이미 메시지를 보냈는지 확인합니다."""
+    today_kst = datetime.now(KST).strftime('%Y-%m-%d')
+
+    result = await execute_query("SELECT 1 FROM daily_chat_log WHERE user_id = $1 AND chat_date = $2",
+                                 (user_id, today_kst))
+    if result: # 이미 기록이 있으면 True 반환
+        print(f"사용자 {user_id}는 오늘({today_kst}) 이미 메시지를 보냈습니다.")
+        return True
+    else:
+        # 오늘 첫 메시지이므로 기록 추가 후 false 반환
+        await execute_query(
+            "INSERT INTO daily_chat_log (user_id, chat_date) VALUES ($1, $2)"
+            "ON CONFLICT (user_id, chat_date) DO nothing",
+            (user_id, today_kst)
+        )
+        print(f"사용자 {user_id}의 오늘({today_kst}) 첫 메시지를 기록했습니다.")
+        return False
+
+
+async def clear_daily_log():
+    await execute_query("DELETE FROM daily_chat_log;")
+    print(f"오늘 이전의 채팅 기록 삭제")
+
+
 class AttendanceBot(commands.Bot):
     def __init__(self):
         # 기본 인텐트 설정
@@ -435,19 +462,6 @@ class AttendanceBot(commands.Bot):
             return time_diff < 5
         return False
 
-    def is_duplicate_message_in_day(self, user_id: int, today: str) -> bool:
-        """오늘 이미 메시지를 보냈는지 확인합니다."""
-        cache_key = f"{user_id}_{today}"
-        if cache_key in self.message_history:
-            return True  # 오늘 이미 메시지를 보냈다면 True
-        self.message_history[cache_key] = datetime.now(KST)
-        return False  # 오늘 처음 보내는 메시지라면 False
-
-    def update_attendance_cache(self, user_id: int, today: str):
-        """출석 캐시를 업데이트합니다."""
-        cache_key = f"{user_id}_{today}"
-        self.attendance_cache[cache_key] = True
-
     async def setup_hook(self):
         """봇이 시작될 때 실행되는 설정"""
         print("\n=== 봇 초기화 시작 ===", flush=True)
@@ -500,6 +514,12 @@ class AttendanceBot(commands.Bot):
 
         # 봇이 준비되면 출석 채널 다시 로드
         await self.load_attendance_channels()
+
+        scheduler = AsyncIOScheduler(timezone='Asia/Seoul')
+        print(f"출석 초기화 시간대: {scheduler.timezone}", flush=True)
+        # 매일 새벽 0시에 데이터베이스 채팅 기록 지우기
+        scheduler.add_job(clear_daily_log, CronTrigger(hour=0))
+        scheduler.start()
 
         print("=" * 50 + "\n", flush=True)
 
@@ -558,14 +578,12 @@ class AttendanceBot(commands.Bot):
             # 메시지를 처리 중으로 표시
             self.mark_message_as_processing(message.id)
 
-            # 사용자 ID와 오늘 날짜로 캐시 키 생성
             user_id = message.author.id
             today = datetime.now(KST).strftime('%Y-%m-%d')
             today_date = datetime.strptime(today, "%Y-%m-%d").date()
-            cache_key = f"{user_id}_{today}"
 
             # 중복 출석 체크
-            if self.is_duplicate_message_in_day(user_id, today):
+            if await is_duplicate_message_in_day(user_id):
                 print(f"중복 출석 감지: {message.author.name}", flush=True)
                 await message.channel.send(f"❌ {message.author.mention}님은 이미 오늘 출석하셨습니다!")
                 self.mark_message_as_processed(message.id)
@@ -613,13 +631,11 @@ class AttendanceBot(commands.Bot):
                 await message.channel.send(
                     f"🎉 {message.author.mention}님 출석하셨습니다!\n"
                     f"오늘 {attendance_order}번째 출석이에요.\n"
-                    f"현재 출석 횟수: {attendance_count}회,\n"
+                    f"현재 총 출석 횟수: {attendance_count}회,\n"
                     f"연속 출석: {streak_count}일\n"
                     f"💰 보상: {reward}원"
                 )
 
-                self.update_message_history(user_id, today)
-                self.update_attendance_cache(user_id, today)
                 self.mark_message_as_processed(message.id)
             else:
                 print("출석 처리 실패", flush=True)

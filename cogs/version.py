@@ -11,7 +11,7 @@ import subprocess
 import pytz
 from typing import Optional, List
 from database_manager import execute_query
-from main import is_admin_or_developer, DEVELOPER_IDS
+from main import is_admin_or_developer, DEVELOPER_IDS, KST
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
@@ -29,10 +29,12 @@ class Version(commands.Cog):
         self.local_commit_author = None
 
         # 봇이 시작될 때 로컬 버전 정보 가져오기
+        self.deploy_time = datetime.datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
         self.get_local_version()
 
     def get_local_version(self):
-        """봇의 로컬 git 정보를 가져오는 함수"""
+        """봇의 로컬 git 정보를 가져오는 함수
+        없다면 대신 배포 시간을 가져움"""
         try:
             # 현재 커밋 해시 가져오기
 
@@ -67,10 +69,10 @@ class Version(commands.Cog):
             print(f"✅ 로컬 버전 정보 로드 완료: {self.local_commit_hash}")
         except Exception as e:
             print(f"로컬 버전 정보 로드 실패: {e}")
-            self.local_commit_hash = None
-            self.local_commit_date = None
-            self.local_commit_message = "Git 정보를 가져올 수 없습니다."
-            self.local_commit_author = "홍길동"
+            self.local_commit_hash = "봇 실행 시간"
+            self.local_commit_date = f"{self.deploy_time}"
+            self.local_commit_message = "재실행 될 때까지 기다려주세요!"
+            self.local_commit_author = "봇이 마지막으로 실행된 시간입니다."
         except FileNotFoundError as e:
             print(e)
 
@@ -139,7 +141,6 @@ class Version(commands.Cog):
                         self.local_commit_hash = "unknown"
                         status_emoji = "✅"
                         status_text = "최신 버전의 정보를 표시합니다."
-
 
                     # 임베드 생성
                     embed = discord.Embed(
