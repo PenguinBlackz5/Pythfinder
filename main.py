@@ -373,7 +373,7 @@ async def is_duplicate_message_in_day(user_id: int) -> bool:
 
     result = await execute_query("SELECT 1 FROM daily_chat_log WHERE user_id = $1 AND chat_date = $2",
                                  (user_id, today_kst))
-    if result: # 이미 기록이 있으면 True 반환
+    if result:  # 이미 기록이 있으면 True 반환
         print(f"사용자 {user_id}는 오늘({today_kst}) 이미 메시지를 보냈습니다.")
         return True
     else:
@@ -692,7 +692,7 @@ if __name__ == "__main__":
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             integrations=[sentry_logging],
-            # traces_sample_rate=1.0 # 성능 트레이싱 필요시
+            traces_sample_rate=1.0  # 성능 트레이싱 필요시
         )
         print("Sentry 초기화 됨")
     else:
