@@ -6,3 +6,4 @@ python-dotenv==1.0.0
 requests~=2.32.3
 asyncpg==0.30.0
 apscheduler~=3.10.4
+sentry-sdk~=2.23.0

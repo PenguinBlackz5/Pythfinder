@@ -13,6 +13,10 @@ import time  # 새로 추가
 import sys
 from typing import Optional, List, Dict, Any
 
+import logging
+import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
+
 from database_manager import get_db_connection, execute_query
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -678,5 +682,25 @@ if __name__ == "__main__":
     if not TOKEN:
         raise ValueError("DISCORD_TOKEN 환경 변수가 설정되지 않았습니다!")
 
+    # 센트리로 에러 로그 전송
+    SENTRY_DSN = os.getenv("SENTRY_DSN")
+    if SENTRY_DSN:
+        sentry_logging = LoggingIntegration(
+            level=logging.INFO,  # INFO 레벨 이상 로그 수집
+            event_level=logging.ERROR  # ERROR 레벨 이상은 Sentry 이벤트로 전송
+        )
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[sentry_logging],
+            # traces_sample_rate=1.0 # 성능 트레이싱 필요시
+        )
+        print("Sentry 초기화 됨")
+    else:
+        print("SENTRY_DSN 환경 변수가 설정되지 않았습니다!")
+
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    print("Sentry initialized.")
     print("봇 실행 시작...", flush=True)
     bot.run(TOKEN)
