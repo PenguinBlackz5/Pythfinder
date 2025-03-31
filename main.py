@@ -701,7 +701,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    division_by_zero = 1 / 0
     print("Sentry initialized.")
     print("봇 실행 시작...", flush=True)
     bot.run(TOKEN)

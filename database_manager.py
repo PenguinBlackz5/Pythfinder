@@ -3,6 +3,7 @@ import asyncpg
 from typing import Optional, List, Dict, Any
 import aiopg
 from dotenv import load_dotenv
+import sentry_sdk
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
@@ -49,6 +50,7 @@ async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[
             return None
     except Exception as e:
         print(f"쿼리 실행 오류: {e}")
+        sentry_sdk.capture_exception(e)
         raise
     finally:
         await pool.release(conn)
