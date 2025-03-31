@@ -205,6 +205,7 @@ class Version(commands.Cog):
                 description=f"오류 발생: {str(e)}",
                 color=0xff0000
             )
+            sentry_sdk.capture_exception(e)
             await interaction.followup.send(embed=error_embed)
 
 
