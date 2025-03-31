@@ -30,7 +30,7 @@ class Version(commands.Cog):
         self.local_commit_author = None
 
         # 봇이 시작될 때 로컬 버전 정보 가져오기
-        self.deploy_time = datetime.datetime.now(KST)
+        self.deploy_time = datetime.datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
         self.get_local_version()
 
     def get_local_version(self):
@@ -71,7 +71,7 @@ class Version(commands.Cog):
         except Exception as e:
             print(f"로컬 버전 정보 로드 실패: {e}")
             self.local_commit_hash = "봇 실행 시간"
-            self.local_commit_date = f"{self.deploy_time}"
+            self.local_commit_date = None
             self.local_commit_message = "재실행 될 때까지 기다려주세요!"
             self.local_commit_author = "봇이 마지막으로 실행된 시간입니다."
         except FileNotFoundError as e:
@@ -130,7 +130,7 @@ class Version(commands.Cog):
                     if self.local_commit_date is not None:
                         local_formatted_date = self.local_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
                     else:
-                        local_formatted_date = "unknown"
+                        local_formatted_date = f"{self.deploy_time}"
 
                     # 버전 비교
                     if self.local_commit_hash is not None:
