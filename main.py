@@ -77,10 +77,10 @@ async def update_balance(user_id: int, amount: int) -> bool:
             'UPDATE user_balance SET balance = user_balance.balance + $1 WHERE user_id = $2',
             (amount, user_id)
         )
-        print(f"{user_id}님의 통장에 {amount}만큼 변동이 생겼습니다.")
+        logger.info(f"{user_id}님의 통장에 {amount}만큼 변동이 생겼습니다.")
         return True
     except Exception as e:
-        print(f"잔액 업데이트 오류: {e}")
+        logger.error(f"잔액 업데이트 오류: {e}")
         return False
 
 
@@ -93,7 +93,7 @@ async def check_balance(user_id: int, required_amount: int) -> bool:
         )
         return bool(result and result[0]['money'] >= required_amount)
     except Exception as e:
-        print(f"잔액 확인 오류: {e}")
+        logger.error(f"잔액 확인 오류: {e}")
         return False
 
 
@@ -106,7 +106,7 @@ async def reset_attendance(user_id: int) -> bool:
         )
         return True
     except Exception as e:
-        print(f"출석 초기화 오류: {e}")
+        logger.error(f"출석 초기화 오류: {e}")
         return False
 
 
@@ -119,7 +119,7 @@ async def reset_money(user_id: int) -> bool:
         )
         return True
     except Exception as e:
-        print(f"잔액 초기화 오류: {e}")
+        logger.error(f"잔액 초기화 오류: {e}")
         return False
 
 
@@ -145,7 +145,7 @@ class ResetAttendanceView(View):
                     view=None
                 )
         except Exception as e:
-            print(f"출석 정보 초기화 중 오류 발생: {e}")
+            logger.error(f"출석 정보 초기화 중 오류 발생: {e}")
             await interaction.response.send_message("❌ 출석 정보 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
@@ -179,7 +179,7 @@ class ResetMoneyView(View):
                     view=None
                 )
         except Exception as e:
-            print(f"데이터베이스 오류: {e}")
+            logger.error(f"데이터베이스 오류: {e}")
             await interaction.response.send_message("❌ 잔고 초기화 중에 오류가 발생했습니다.", ephemeral=True)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.red)
@@ -211,7 +211,7 @@ class ClearAllView(View):
 
         # 멤버 ID 목록 생성 (봇 제외)
         member_ids = [member.id for member in guild.members if not member.bot]
-        print(f"초기화 대상 멤버 ID 목록: {member_ids}")  # 디버깅용
+        print(f"초기화 대상 멤버 ID 목록: {member_ids}")
 
         if not member_ids:
             await interaction.response.edit_message(
@@ -239,7 +239,7 @@ class ClearAllView(View):
             f"- 전체 레코드 변화: {total_before} → {total_after}"
         )
 
-        print(status_message)  # 디버깅용
+        print(status_message)
         await interaction.response.edit_message(content=status_message, view=None)
 
     @discord.ui.button(label="✗ 취소", style=discord.ButtonStyle.gray)
@@ -374,7 +374,7 @@ async def is_duplicate_message_in_day(user_id: int) -> bool:
     result = await execute_query("SELECT 1 FROM daily_chat_log WHERE user_id = $1 AND chat_date = $2",
                                  (user_id, today_kst))
     if result:  # 이미 기록이 있으면 True 반환
-        print(f"사용자 {user_id}는 오늘({today_kst}) 이미 메시지를 보냈습니다.")
+        logger.info(f"사용자 {user_id}는 오늘({today_kst}) 이미 메시지를 보냈습니다.")
         return True
     else:
         # 오늘 첫 메시지이므로 기록 추가 후 false 반환
@@ -383,13 +383,13 @@ async def is_duplicate_message_in_day(user_id: int) -> bool:
             "ON CONFLICT (user_id, chat_date) DO nothing",
             (user_id, today_kst)
         )
-        print(f"사용자 {user_id}의 오늘({today_kst}) 첫 메시지를 기록했습니다.")
+        logger.info(f"사용자 {user_id}의 오늘({today_kst}) 첫 메시지를 기록했습니다.")
         return False
 
 
 async def clear_daily_log():
     await execute_query("DELETE FROM daily_chat_log;")
-    print(f"오늘 이전의 채팅 기록 삭제")
+    logger.info(f"clear_daily_log_ KST 실행 시간: {datetime.datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
 
 
 class AttendanceBot(commands.Bot):
@@ -476,7 +476,7 @@ class AttendanceBot(commands.Bot):
             # await self.init_database()
             print("데이터베이스 초기화 완료", flush=True)
         except Exception as e:
-            print(f"데이터베이스 초기화 오류: {e}", flush=True)
+            logger.error(f"데이터베이스 초기화 오류: {e}")
 
         # 출석 채널 로드
         print("출석 채널 로드 중...", flush=True)
@@ -484,7 +484,7 @@ class AttendanceBot(commands.Bot):
             await self.load_attendance_channels()
             print("출석 채널 로드 완료", flush=True)
         except Exception as e:
-            print(f"출석 채널 로드 오류: {e}", flush=True)
+            logger.error(f"출석 채널 로드 오류: {e}")
 
         # cogs 디렉토리에서 모든 cog 파일 로드
         print("Cog 파일 로드 중...", flush=True)
@@ -495,7 +495,7 @@ class AttendanceBot(commands.Bot):
                     await self.load_extension(f'cogs.{filename[:-3]}')
                     print(f"로드 완료: {filename}", flush=True)
                 except Exception as e:
-                    print(f"Cog 로드 오류 ({filename}): {e}", flush=True)
+                    logger.error(f"Cog 로드 오류 ({filename}): {e}")
 
         # 명령어 동기화
         print("명령어 동기화 중...", flush=True)
@@ -503,7 +503,7 @@ class AttendanceBot(commands.Bot):
             await self.tree.sync()
             print("명령어 동기화 완료", flush=True)
         except Exception as e:
-            print(f"명령어 동기화 오류: {e}", flush=True)
+            logger.error(f"명령어 동기화 오류: {e}")
 
         print("=== 봇 초기화 완료 ===\n", flush=True)
 
@@ -520,9 +520,8 @@ class AttendanceBot(commands.Bot):
         await self.load_attendance_channels()
 
         scheduler = AsyncIOScheduler(timezone='Asia/Seoul')
-        print(f"출석 초기화 시간대: {scheduler.timezone}", flush=True)
         # 매일 새벽 0시에 데이터베이스 채팅 기록 지우기
-        scheduler.add_job(clear_daily_log, CronTrigger(hour=0))
+        scheduler.add_job(clear_daily_log, CronTrigger(hour=0, timezone=KST))
         scheduler.start()
 
         print("=" * 50 + "\n", flush=True)
@@ -533,14 +532,15 @@ class AttendanceBot(commands.Bot):
             result = await execute_query('SELECT channel_id FROM attendance_channels')
             self.attendance_channels = {row['channel_id'] for row in result}
         except Exception as e:
-            print(f"출석 채널 로드 오류: {e}")
+            logger.error(f"출석 채널 로드 오류: {e}")
             self.attendance_channels = set()
 
     async def on_message(self, message):
-        print(f"\n=== 메시지 이벤트 발생 ===", flush=True)
-        print(f"메시지 ID: {message.id}", flush=True)
-        print(f"작성자: {message.author.name}", flush=True)
-        print(f"메시지 내용: {message.content}", flush=True)
+        logger.info(f"{message.author.name}의 메시지 이벤트 발생", extra={
+            'message_id': message.id,
+            'author_name': message.author.name,
+            'message_content': message.content,
+        })
 
         # DM 채널인 경우 명령어만 처리하고 종료
         if isinstance(message.channel, discord.DMChannel):
@@ -554,7 +554,7 @@ class AttendanceBot(commands.Bot):
             print(f"채널 ID: {message.channel.id}", flush=True)
             print(f"등록된 출석 채널: {self.attendance_channels}", flush=True)
         except AttributeError:
-            print("채널 정보를 가져올 수 없습니다.", flush=True)
+            logger.error("채널 정보를 가져올 수 없습니다.")
 
         print("=" * 50 + "\n", flush=True)
 
@@ -588,7 +588,7 @@ class AttendanceBot(commands.Bot):
 
             # 중복 출석 체크
             if await is_duplicate_message_in_day(user_id):
-                print(f"중복 출석 감지: {message.author.name}", flush=True)
+                logger.info(f"중복 출석 감지: {message.author.name}")
                 await message.channel.send(f"❌ {message.author.mention}님은 이미 오늘 출석하셨습니다!")
                 self.mark_message_as_processed(message.id)
                 return
@@ -642,13 +642,10 @@ class AttendanceBot(commands.Bot):
 
                 self.mark_message_as_processed(message.id)
             else:
-                print("출석 처리 실패", flush=True)
+                logger.info("출석 처리 실패")
         except Exception as e:
-            print(f"출석 처리 오류: {e}", flush=True)
+            logger.error(f"출석 처리 오류: {e}")
             self.clear_processing_message(message.id)
-
-
-bot = AttendanceBot()
 
 
 def keep_alive():
@@ -658,11 +655,32 @@ def keep_alive():
             # Render에서 제공하는 URL 환경변수 사용
             url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:8080')
             response = requests.get(url)
-            print(f"서버 핑 전송 완료: {response.status_code}", flush=True)
+            logger.info(f"서버 핑 전송 완료: {response.status_code}")
         except Exception as e:
-            print(f"서버 핑 전송 실패: {e}", flush=True)
+            logger.error(f"서버 핑 전송 실패: {e}")
         time.sleep(840)  # 14분(840초)마다 실행 (15분보다 약간 짧게 설정)
 
+
+bot = AttendanceBot()
+
+# 센트리로 에러 로그 전송
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_logging = LoggingIntegration(
+        level=logging.INFO,  # INFO 레벨 이상 로그 수집
+        event_level=logging.ERROR  # ERROR 레벨 이상은 Sentry 이벤트로 전송
+    )
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[sentry_logging],
+        traces_sample_rate=1.0  # 성능 트레이싱 필요시
+    )
+    print("Sentry 초기화 됨")
+else:
+    print("SENTRY_DSN 환경 변수가 설정되지 않았습니다!")
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
@@ -682,25 +700,5 @@ if __name__ == "__main__":
     if not TOKEN:
         raise ValueError("DISCORD_TOKEN 환경 변수가 설정되지 않았습니다!")
 
-    # 센트리로 에러 로그 전송
-    SENTRY_DSN = os.getenv("SENTRY_DSN")
-    if SENTRY_DSN:
-        sentry_logging = LoggingIntegration(
-            level=logging.INFO,  # INFO 레벨 이상 로그 수집
-            event_level=logging.ERROR  # ERROR 레벨 이상은 Sentry 이벤트로 전송
-        )
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            integrations=[sentry_logging],
-            traces_sample_rate=1.0  # 성능 트레이싱 필요시
-        )
-        print("Sentry 초기화 됨")
-    else:
-        print("SENTRY_DSN 환경 변수가 설정되지 않았습니다!")
-
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    print("Sentry initialized.")
-    print("봇 실행 시작...", flush=True)
+    logger.info("봇 실행 시작...")
     bot.run(TOKEN)
