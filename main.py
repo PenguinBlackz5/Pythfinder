@@ -389,7 +389,7 @@ async def is_duplicate_message_in_day(user_id: int) -> bool:
 
 async def clear_daily_log():
     await execute_query("DELETE FROM daily_chat_log;")
-    logger.info(f"clear_daily_log_ KST 실행 시간: {datetime.datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
+    logger.info(f"clear_daily_log_ KST 실행 시간: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
 
 
 class AttendanceBot(commands.Bot):
