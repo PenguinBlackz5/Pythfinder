@@ -30,10 +30,10 @@ class Baseball(commands.Cog):
 
         @bot.tree.command(name="숫자야구", description="숫자야구 게임을 시작합니다.")
         async def baseball(interaction: discord.Interaction, bet_amount: int):
-            if bet_amount < 1:
+            if bet_amount < 10:
                 error_embed = discord.Embed(
                     title="❌ 오류",
-                    description="베팅 금액은 최소 1원 이상이어야 합니다.",
+                    description="베팅 금액은 최소 10원 이상이어야 합니다.",
                     color=0xff0000
                 )
                 return await interaction.response.send_message(embed=error_embed, ephemeral=True)
@@ -123,7 +123,7 @@ class Baseball(commands.Cog):
 
                     if strikes == 3:
                         # 승리 금액 계산식
-                        winnings = math.ceil(bet_amount * multiplier)  # round() 대신 math.ceil() 사용
+                        winnings = round(bet_amount * multiplier)
 
                         try:
                             # 봇의 잔고에서 차감하고 유저에게 지급

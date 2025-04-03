@@ -41,10 +41,10 @@ class IndianPoker(commands.Cog):
 
     @commands.hybrid_command(name="인디언포커", description="인디언 포커 게임을 시작합니다.")
     async def indian_poker(self, ctx: commands.Context, bet_amount: int):
-        if bet_amount < 1:
+        if bet_amount < 10:
             error_embed = discord.Embed(
                 title="❌ 오류",
-                description="베팅 금액은 최소 1원 이상이어야 합니다.",
+                description="베팅 금액은 최소 10원 이상이어야 합니다.",
                 color=0xff0000
             )
             if isinstance(ctx, discord.Interaction):
@@ -201,12 +201,12 @@ class IndianPokerView(discord.ui.View):
 
         try:
             if user_sum > bot_sum:
-                winnings = math.ceil(bet_amount * multiplier)
+                winnings = round(bet_amount * multiplier)
                 if await update_balance(self.cog.bot.user.id, -winnings) and await update_balance(interaction.user.id, winnings):
                     result_embed.description += f"🎉 승리! {winnings}원을 획득했습니다!"
                     result_embed.color = 0x00ff00
             elif user_sum < bot_sum:
-                loss = math.ceil(bet_amount * multiplier)
+                loss = round(bet_amount * multiplier)
                 await update_balance(self.cog.bot.user.id, loss)
                 result_embed.description += f"😢 패배... {loss}원을 잃었습니다."
                 result_embed.color = 0xff0000
@@ -234,7 +234,7 @@ class IndianPokerView(discord.ui.View):
             return await interaction.response.send_message("게임 데이터를 찾을 수 없습니다.", ephemeral=True)
 
         _, _, _, _, bet_amount, multiplier = game_data
-        loss = math.ceil(bet_amount * multiplier)
+        loss = round(bet_amount * multiplier)
         user_sum = self.user_hidden + self.user_open
         bot_sum = self.bot_hidden + self.bot_open
 
@@ -248,7 +248,7 @@ class IndianPokerView(discord.ui.View):
         }
         
         refund_rate = refund_rates.get(self.bet_count, 0)
-        refund_amount = math.ceil(bet_amount * refund_rate)
+        refund_amount = round(bet_amount * refund_rate)
 
         try:
             # 환급금 지급
