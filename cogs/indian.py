@@ -238,14 +238,35 @@ class IndianPokerView(discord.ui.View):
         user_sum = self.user_hidden + self.user_open
         bot_sum = self.bot_hidden + self.bot_open
 
+        # 진행 횟수에 따른 환급률 설정
+        refund_rates = {
+            0: 0.8,  # 진행 0회: 80% 환급
+            1: 0.4,  # 진행 1회: 40% 환급
+            2: 0.2,  # 진행 2회: 20% 환급
+            3: 0.1,  # 진행 3회: 10% 환급
+            4: 0.05  # 진행 4회: 5% 환급
+        }
+        
+        refund_rate = refund_rates.get(self.bet_count, 0)
+        refund_amount = math.ceil(bet_amount * refund_rate)
+
         try:
-            await update_balance(self.cog.bot.user.id, loss)
+            # 환급금 지급
+            if refund_amount > 0:
+                await update_balance(interaction.user.id, refund_amount)
+            
+            # 나머지 손실금은 봇에게
+            final_loss = loss - refund_amount
+            if final_loss > 0:
+                await update_balance(self.cog.bot.user.id, final_loss)
+
             fold_embed = discord.Embed(
                 title="🎮 인디언 포커 - 포기",
                 description=f"게임을 포기했습니다.\n"
                           f"당신의 카드 합: **{user_sum}** (히든: {self.user_hidden}, 오픈: {self.user_open})\n"
                           f"봇의 카드 합: **{bot_sum}** (히든: {self.bot_hidden}, 오픈: {self.bot_open})\n\n"
-                          f"베팅금 {loss}원을 잃었습니다.",
+                          f"베팅금 {loss}원 중 {refund_amount}원이 환급되었습니다. (환급률: {refund_rate*100}%)\n"
+                          f"최종 손실: {final_loss}원",
                 color=0xff0000
             )
         except Exception as e:
