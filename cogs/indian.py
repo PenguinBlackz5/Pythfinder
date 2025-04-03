@@ -235,12 +235,16 @@ class IndianPokerView(discord.ui.View):
 
         _, _, _, _, bet_amount, multiplier = game_data
         loss = math.ceil(bet_amount * multiplier)
+        user_sum = self.user_hidden + self.user_open
+        bot_sum = self.bot_hidden + self.bot_open
 
         try:
             await update_balance(self.cog.bot.user.id, loss)
             fold_embed = discord.Embed(
                 title="🎮 인디언 포커 - 포기",
                 description=f"게임을 포기했습니다.\n"
+                          f"당신의 카드 합: **{user_sum}** (히든: {self.user_hidden}, 오픈: {self.user_open})\n"
+                          f"봇의 카드 합: **{bot_sum}** (히든: {self.bot_hidden}, 오픈: {self.bot_open})\n\n"
                           f"베팅금 {loss}원을 잃었습니다.",
                 color=0xff0000
             )
@@ -258,4 +262,4 @@ class IndianPokerView(discord.ui.View):
         await interaction.response.edit_message(embed=fold_embed, view=self)
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(IndianPoker(bot)) 
+    await bot.add_cog(IndianPoker(bot))
