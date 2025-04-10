@@ -589,7 +589,7 @@ class AttendanceBot(commands.Bot):
             # 중복 출석 체크
             if await is_duplicate_message_in_day(user_id):
                 logger.info(f"중복 출석 감지: {message.author.name}")
-                await message.channel.send(f"❌ {message.author.mention}님은 이미 오늘 출석하셨습니다!")
+                await message.channel.send(f"❌ {message.author.mention}님은 이미 오늘 출석하셨습니다!", delete_after=3)
                 self.mark_message_as_processed(message.id)
                 return
 
