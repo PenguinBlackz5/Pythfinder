@@ -42,7 +42,7 @@ class GeminiCog(commands.Cog):
         else:
             logger.info(f'{self.bot.user.name} 봇의 GeminiCog가 준비되었습니다.')
 
-    @app_commands.command(name="AI 채팅", description="✨ Gemini AI에게 질문합니다.")
+    @app_commands.command(name="ai-chat", description="✨ Gemini AI에게 질문합니다.")
     @app_commands.describe(prompt="Gemini AI에게 전달할 질문 내용입니다.")
     async def ask_gemini_slash(self, interaction: discord.Interaction, prompt: str):
         """Gemini AI 모델에게 주어진 프롬프트에 대한 응답을 요청합니다."""
