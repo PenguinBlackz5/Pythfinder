@@ -1,7 +1,7 @@
 # cogs/gemini_cog.py
 
 import discord
-from discord import app_commands  # app_commands 임포트
+from discord import app_commands
 from discord.ext import commands
 import google.generativeai as genai
 import os
@@ -27,8 +27,9 @@ class GeminiCog(commands.Cog):
 
         try:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')  # 또는 'gemini-pro' 등
-            logger.info("✅ Gemini Cog가 성공적으로 로드되었으며, Gemini 모델이 초기화되었습니다.")
+            # 사용자가 제공한 모델 이름 사용
+            self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+            logger.info(f"✅ Gemini Cog가 성공적으로 로드되었으며, Gemini 모델({self.model.model_name})이 초기화되었습니다.")
         except Exception as e:
             logger.error(f"Gemini 모델 초기화 중 오류 발생: {e}")
             self.model = None
@@ -54,72 +55,101 @@ class GeminiCog(commands.Cog):
             )
             return
 
-        if not prompt:
+        # 프롬프트가 비어있는 경우 (일반적으로 슬래시 커맨드에서 'required=True'로 설정되므로 불필요할 수 있음)
+        if not prompt.strip():
             await interaction.response.send_message(
                 "🤔 질문 내용을 입력해주세요!",
                 ephemeral=True
             )
             return
 
-        # API 호출 시간이 걸릴 수 있으므로 defer를 호출하여 사용자에게 응답 대기 중임을 알림
-        # ephemeral=False로 설정하면 "Bot is thinking..." 메시지가 공개적으로 보임
-        # 답변 자체를 ephemeral=True로 하고 싶다면 여기서 ephemeral=True로 설정할 수 있음
         await interaction.response.defer(thinking=True, ephemeral=False)
 
         try:
-            logger.info(f"➡️ Gemini API 요청 (Slash): '{prompt}' (요청자: {interaction.user.name})")
+            logger.info(
+                f"➡️ Gemini API 요청 (Slash): '{prompt[:200]}...' (요청자: {interaction.user.name} ({interaction.user.id}))")
 
-            # 비동기 API 호출
             response = await self.model.generate_content_async(prompt)
 
-            response_text = ""
+            response_text_content = ""  # AI의 실제 답변 또는 정보/오류 메시지
+
             if response.text:
-                response_text = response.text
+                response_text_content = response.text
                 logger.info(f"⬅️ Gemini API 응답 성공 (요청자: {interaction.user.name})")
             else:
-                # 응답이 비어있거나, 안전상의 이유로 차단된 경우 처리
-                block_reason = response.prompt_feedback.block_reason if response.prompt_feedback else "알 수 없음"
+                block_reason = "알 수 없음"
+                finish_reason_str = "알 수 없음"
+                safety_info_str = ""
+
+                if response.prompt_feedback:
+                    block_reason = response.prompt_feedback.block_reason.name if response.prompt_feedback.block_reason else "제공되지 않음"
+
                 error_message_parts = [f"Gemini AI로부터 응답을 받지 못했습니다. 😔 (차단 사유: {block_reason})"]
 
                 candidate_info_available = hasattr(response, 'candidates') and response.candidates
                 if candidate_info_available:
-                    finish_reason = response.candidates[0].finish_reason.name if response.candidates[
-                        0].finish_reason else "알 수 없음"
-                    if finish_reason != "STOP":  # STOP이 아닌 다른 이유로 종료된 경우
-                        error_message_parts.append(f"종료 사유: {finish_reason}")
+                    current_candidate = response.candidates[0]
+                    if current_candidate.finish_reason:
+                        finish_reason_str = current_candidate.finish_reason.name
+                    if finish_reason_str != "STOP":
+                        error_message_parts.append(f"종료 사유: {finish_reason_str}")
 
-                    if response.candidates[0].safety_ratings:
+                    if current_candidate.safety_ratings:
                         safety_info_parts = [
                             f"{s.category.name.replace('HARM_CATEGORY_', '')}: {s.probability.name}"
-                            for s in response.candidates[0].safety_ratings
-                            if s.probability.name not in ["NEGLIGIBLE", "LOW"]  # 보통 또는 높음만 표시 (조정 가능)
+                            for s in current_candidate.safety_ratings
+                            if s.probability.name not in ["NEGLIGIBLE", "LOW"]
                         ]
                         if safety_info_parts:
-                            error_message_parts.append("감지된 안전 문제: " + ", ".join(safety_info_parts))
+                            safety_info_str = ", ".join(safety_info_parts)
+                            error_message_parts.append(f"감지된 안전 문제: {safety_info_str}")
 
-                response_text = "\n".join(error_message_parts)
+                response_text_content = "\n".join(error_message_parts)
                 logger.warning(
-                    f"Gemini API 응답 없음 또는 차단됨 (요청자: {interaction.user.name}, 사유: {block_reason}, "
-                    f"종료 사유: {finish_reason if candidate_info_available and 'finish_reason' in locals() else 'N/A'})"
+                    f"Gemini API 응답 없음 또는 차단됨 (요청자: {interaction.user.name}, 차단: {block_reason}, 종료: {finish_reason_str}, 안전문제: '{safety_info_str if safety_info_str else '없음'}')"
                 )
 
-            # defer를 사용했으므로 followup.send로 응답합니다.
-            if len(response_text) > 1990:
-                chunks = [response_text[i:i + 1990] for i in range(0, len(response_text), 1990)]
-                await interaction.followup.send(chunks[0])  # 첫 번째 청크 전송
-                for chunk in chunks[1:]:
-                    # 후속 청크는 채널에 직접 보내거나, followup을 여러 번 사용
-                    # followup을 여러 번 사용하면 각 청크가 별도
-                    await interaction.followup.send(chunk)
+            # Embed 생성
+            embed = discord.Embed(
+                color=discord.Color.from_rgb(123, 104, 238),  # MediumSlateBlue 색상 또는 원하는 색상
+                timestamp=interaction.created_at  # 메시지 생성 시간
+            )
+            embed.set_author(
+                name=f"{interaction.user.display_name} 님의 질문에 대한 응답:",
+                icon_url=interaction.user.avatar.url if interaction.user.avatar else discord.Embed.Empty
+            )
+
+            # 프롬프트 표시 (Embed 필드 값 최대 1024자)
+            # discord.utils.escape_markdown을 사용하여 마크다운 특수문자 처리
+            prompt_display_value = discord.utils.escape_markdown(prompt)
+            if len(prompt_display_value) > 1020:  # 약간의 여유
+                prompt_display_value = prompt_display_value[:1020] + "..."
+            embed.add_field(name="📝 원본 프롬프트", value=f"```{prompt_display_value}```", inline=False)
+
+            # AI 답변 또는 정보 메시지 처리
+            if not response_text_content.strip():
+                response_text_content = "알 수 없는 이유로 응답 내용이 비어있습니다."
+
+            # 답변을 Embed 설명에 추가 (Embed 설명 최대 4096자)
+            if len(response_text_content) <= 4000:  # 약간의 여유
+                embed.description = response_text_content
+                await interaction.followup.send(embed=embed)
             else:
-                await interaction.followup.send(response_text)
+                # 내용이 너무 길 경우, Embed 설명에는 일부만 표시하고 나머지는 별도 메시지로 전송
+                embed.description = response_text_content[:4000] + "\n\n**(내용이 길어 일부만 표시됩니다. 전체 내용은 아래 메시지를 참고하세요.)**"
+                await interaction.followup.send(embed=embed)
+
+                remaining_response = response_text_content[4000:]
+                # Discord 메시지당 최대 2000자 제한
+                chunks = [remaining_response[i:i + 1990] for i in range(0, len(remaining_response), 1990)]
+                for chunk in chunks:
+                    await interaction.followup.send(chunk)
 
         except Exception as e:
-            logger.error(f"Gemini API 처리 중 오류 발생 (Slash): {e} (요청자: {interaction.user.name})")
-            # 이미 defer 되었으므로 followup.send 사용
+            logger.error(f"Gemini API 처리 중 예기치 않은 오류 발생 (Slash): {e}", exc_info=True)
             await interaction.followup.send(
-                f"죄송합니다, Gemini API와 통신 중 오류가 발생했습니다: `{type(e).__name__}: {e}` 😭",
-                ephemeral=True  # 오류는 사용자에게만 보이도록
+                f"죄송합니다, 요청 처리 중 예기치 않은 오류가 발생했습니다: `{type(e).__name__}` 😭 관리자에게 문의해주세요.",
+                ephemeral=True
             )
 
 
@@ -127,13 +157,11 @@ async def setup(bot: commands.Bot):
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     cog_instance = GeminiCog(bot)
 
-    if not gemini_api_key:
-        logger.error("🚨 GEMINI_API_KEY 환경 변수가 설정되지 않아 GeminiCog를 로드할 수 없습니다 (기능 제한됨).")
-        # Cog는 추가하되, model이 None이므로 커맨드 사용 시 오류
-    # API 키가 있더라도 모델 초기화 실패 시 self.model이 None
+    if not gemini_api_key:  # API 키가 없어도 Cog는 로드되지만, 기능은 제한됨
+        logger.error("🚨 GEMINI_API_KEY 환경 변수가 설정되지 않았습니다 (기능 제한됨).")
 
     await bot.add_cog(cog_instance)
-    if cog_instance.model:  # 모델이 성공적으로 초기화된 경우에만
-        logger.info("🚀 GeminiCog가 봇에 성공적으로 추가되었으며, 슬래시 커맨드 등록 준비가 되었습니다.")
+    if cog_instance.model:
+        logger.info(f"🚀 GeminiCog (모델: {cog_instance.model.model_name})가 봇에 성공적으로 추가되었습니다.")
     else:
         logger.warning("⚠️ GeminiCog가 봇에 추가되었으나, Gemini 모델이 초기화되지 않아 기능이 제한됩니다.")
