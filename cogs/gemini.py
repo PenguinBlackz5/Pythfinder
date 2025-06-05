@@ -14,7 +14,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s:%(name)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- [기존] 캐릭터 말투 전치 프롬프트 ---
+
 CHARACTER_PRE_PROMPT = """
 [시스템 레벨 - 최상위 고정 지침]
 
@@ -93,7 +93,7 @@ class GeminiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash-latest")
+        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-preview-05-20")
         self.model = None
         if not self.api_key:
             logger.error("🚨 GEMINI_API_KEY가 설정되지 않았습니다.")
@@ -255,7 +255,7 @@ class GeminiCog(commands.Cog):
     @app_commands.command(name="ai-chat", description="✨ Gemini AI에게 일회성 질문을 합니다 (대화 기억 X).")
     @app_commands.describe(
         prompt="Gemini AI에게 전달할 질문 내용입니다.",
-        apply_persona="캐릭터의 말투를 적용할지 여부입니다. (기본값: 아니오)"
+        apply_persona="호시노 말투를 적용할지 여부입니다. (기본값: 아니오)"
     )
     async def ask_gemini_single(self, interaction: discord.Interaction, prompt: str,
                                 apply_persona: bool = False):
@@ -306,7 +306,7 @@ class GeminiCog(commands.Cog):
     @app_commands.describe(
         attachment="이미지 파일을 첨부해주세요 (PNG, JPEG, WEBP, HEIC, HEIF).",
         prompt=" (선택 사항) 이미지에 대한 질문이나 지시사항을 입력하세요.",
-        apply_persona="캐릭터의 말투를 적용할지 여부입니다. (기본값: 아니오)"
+        apply_persona="호시노 말투를 적용할지 여부입니다. (기본값: 아니오)"
     )
     async def ask_gemini_file(self, interaction: discord.Interaction, attachment: discord.Attachment,
                               prompt: Optional[str] = None, apply_persona: bool = False):
