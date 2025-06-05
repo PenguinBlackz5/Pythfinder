@@ -29,7 +29,7 @@ class GeminiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash-latest")
+        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-preview-05-20")
         self.model = None
         # user_conversations 구조: { user_id: { char_id1: {'session': ChatSession}, char_id2: {'session': ChatSession} } }
         self.user_conversations: Dict[int, Dict[str, Dict[str, Any]]] = {}
@@ -42,10 +42,10 @@ class GeminiCog(commands.Cog):
         try:
             genai.configure(api_key=self.api_key)
             safety_settings = [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"}
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
             ]
             self.model = genai.GenerativeModel(self.model_name, safety_settings=safety_settings)
             logger.info(f"✅ Gemini 모델({self.model_name}) 초기화 성공 (안전 설정 적용됨).")
@@ -506,7 +506,7 @@ class GeminiCog(commands.Cog):
 
             if message_content.role == "user" and i == 0 and char_pre_prompt and full_text.startswith(char_pre_prompt):
                 actual_user_text = full_text.replace(char_pre_prompt, "", 1).lstrip('\n').strip()
-                entry = f"**[System]** *{char_name} 페르소나 적용됨*\n"
+                entry = f"**[System]** *{char_name}의 캐릭터 페르소나 적용됨*\n"
                 if actual_user_text:
                     entry += f"**{display_name_for_role}:** {discord.utils.escape_markdown(actual_user_text[:100])}{'...' if len(actual_user_text) > 100 else ''}"
                 else:
