@@ -312,7 +312,7 @@ class GeminiCog(commands.Cog):
             else:
                 await interaction.followup.send(error_message, ephemeral=True)
 
-    @app_commands.command(name="ai-chat", description="✨ Gemini AI에게 일회성 질문을 합니다 (대화 기억 X).")
+    @app_commands.command(name="ai-chat", description="✨ AI에게 일회성 질문을 합니다 (대화 기억 X).")
     @app_commands.describe(
         prompt="Gemini AI에게 전달할 질문 내용입니다.",
         character="사용할 AI 캐릭터를 선택하세요 (기본: default)."
