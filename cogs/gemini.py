@@ -44,28 +44,23 @@ class GeminiCog(commands.Cog):
             logger.error(f"Gemini 모델 ({self.model_name}) 초기화 중 오류 발생: {e}")
             self.model = None
 
-        # 사용자별 대화 기록 (ChatSession 저장)
-        self.user_conversations = {}  # {user_id: ChatSession}
+        self.user_conversations = {}
 
-    async def _send_gemini_request(self, interaction: discord.Interaction, prompt_parts: list,
-                                   ephemeral_response: bool = False, chat_session: genai.ChatSession = None):
-        """
-        Gemini API에 요청을 보내고 응답을 처리하는 내부 헬퍼 함수.
-        prompt_parts: 텍스트 또는 [텍스트, 이미지_데이터] 형태의 리스트.
-        chat_session: 대화형 요청인 경우 ChatSession 객체.
-        ephemeral_response: 응답을 요청자에게만 보이게 할지 여부.
-        """
+    async def _send_gemini_request(self,
+                                   interaction: discord.Interaction,
+                                   prompt_parts: list,
+                                   attachment_image_url: str = None,
+                                   ephemeral_response: bool = False,
+                                   chat_session: genai.ChatSession = None):
         if not self.model:
-            # defer가 이미 호출된 경우 followup 사용
             message_content = "죄송합니다, Gemini AI 모델이 현재 초기화되지 않았거나 사용할 수 없습니다. 😥 관리자에게 문의해주세요."
             if interaction.response.is_done():
                 await interaction.followup.send(message_content, ephemeral=True)
-            else:  # 거의 발생하지 않지만, 만약을 위해
+            else:
                 await interaction.response.send_message(message_content, ephemeral=True)
             return
 
         try:
-            # 프롬프트 로깅 (간소화)
             log_prompt_part = prompt_parts[0] if isinstance(prompt_parts[0], str) else "[이미지 포함된 프롬프트]"
             logger.info(
                 f"➡️ Gemini API 요청: '{str(log_prompt_part)[:100]}...' (요청자: {interaction.user.name} ({interaction.user.id}), 대화형: {'예' if chat_session else '아니오'})"
@@ -73,20 +68,19 @@ class GeminiCog(commands.Cog):
 
             response = None
             if chat_session:
-                # ChatSession 사용 시, content는 단일 값 또는 리스트 ([text, image])
                 content_to_send = prompt_parts
                 if len(prompt_parts) == 1 and isinstance(prompt_parts[0], str):
-                    content_to_send = prompt_parts[0]  # 텍스트만 있는 경우 문자열로 전달
+                    content_to_send = prompt_parts[0]
                 response = await chat_session.send_message_async(content_to_send)
             else:
                 response = await self.model.generate_content_async(prompt_parts)
 
             response_text_content = ""
-
             if response.text:
                 response_text_content = response.text
                 logger.info(f"⬅️ Gemini API 응답 성공 (요청자: {interaction.user.name})")
             else:
+                # (이전과 동일한 오류 처리 로직)
                 block_reason = "알 수 없음"
                 finish_reason_str = "알 수 없음"
                 safety_info_str = ""
@@ -104,7 +98,7 @@ class GeminiCog(commands.Cog):
                     current_candidate = response.candidates[0]
                     if current_candidate.finish_reason:
                         finish_reason_str = current_candidate.finish_reason.name
-                    if finish_reason_str not in ["STOP", "FINISH_REASON_UNSPECIFIED"]:  # STOP이 아니면 문제로 간주
+                    if finish_reason_str not in ["STOP", "FINISH_REASON_UNSPECIFIED"]:
                         error_message_parts.append(f"종료 사유: {finish_reason_str}")
 
                     if current_candidate.safety_ratings:
@@ -122,9 +116,8 @@ class GeminiCog(commands.Cog):
                     f"Gemini API 응답 없음 또는 문제 발생 (요청자: {interaction.user.name}, 차단: {block_reason}, 종료: {finish_reason_str}, 안전문제: '{safety_info_str if safety_info_str else '없음'}')"
                 )
 
-            # Embed 생성
             embed = discord.Embed(
-                color=discord.Color.purple(),  # Embed 색상 변경
+                color=discord.Color.purple(),
                 timestamp=interaction.created_at
             )
             embed.set_author(
@@ -133,27 +126,29 @@ class GeminiCog(commands.Cog):
             )
 
             prompt_display_text = ""
-            if isinstance(prompt_parts[0], str):  # 텍스트 프롬프트가 있는 경우
+            if isinstance(prompt_parts[0], str):
                 prompt_text_for_display = discord.utils.escape_markdown(prompt_parts[0])
-                if len(prompt_text_for_display) > 1000:  # 필드 값 제한 고려
+                if len(prompt_text_for_display) > 1000:
                     prompt_text_for_display = prompt_text_for_display[:1000] + "..."
                 prompt_display_text = f"```{prompt_text_for_display}```"
 
-            # 파일 첨부 여부 표시
-            is_file_attached = any(isinstance(part, dict) and "mime_type" in part for part in prompt_parts)
-            if is_file_attached:
+            is_file_attached_to_api = any(isinstance(part, dict) and "mime_type" in part for part in prompt_parts)
+            if is_file_attached_to_api and attachment_image_url:  # API 요청에 파일이 있고, URL도 전달된 경우
                 if prompt_display_text:
-                    prompt_display_text += "\n📄 (첨부 파일과 함께 요청됨)"
-                else:  # 프롬프트 없이 파일만 첨부한 경우 (ai-chat-file에서 빈 프롬프트 시 기본 프롬프트 사용)
-                    prompt_display_text = "📄 (첨부 파일과 함께 요청됨)"
+                    prompt_display_text += "\n🖼️ (아래 첨부된 이미지와 함께 요청됨)"
+                else:
+                    prompt_display_text = "🖼️ (아래 첨부된 이미지와 함께 요청됨)"
 
             if prompt_display_text:
                 embed.add_field(name="📝 원본 요청", value=prompt_display_text, inline=False)
 
+            if attachment_image_url:
+                embed.set_image(url=attachment_image_url)
+
             if not response_text_content.strip():
                 response_text_content = "응답 내용이 비어있습니다. API 제한 또는 다른 문제가 발생했을 수 있습니다."
 
-            if len(response_text_content) <= 4000:  # Embed 설명 최대 4096자
+            if len(response_text_content) <= 4000:
                 embed.description = response_text_content
                 await interaction.followup.send(embed=embed, ephemeral=ephemeral_response)
             else:
@@ -196,7 +191,6 @@ class GeminiCog(commands.Cog):
         if not prompt.strip():
             await interaction.response.send_message("🤔 질문 내용을 입력해주세요!", ephemeral=True)
             return
-        # 공개 응답, defer thinking=True
         await interaction.response.defer(thinking=True, ephemeral=False)
         await self._send_gemini_request(interaction, [prompt], ephemeral_response=False)
 
@@ -210,13 +204,9 @@ class GeminiCog(commands.Cog):
             await interaction.response.send_message("🤔 메시지 내용을 입력해주세요!", ephemeral=True)
             return
 
-        # 공개 응답, defer thinking=True
         await interaction.response.defer(thinking=True, ephemeral=False)
-
         user_id = interaction.user.id
         if user_id not in self.user_conversations:
-            # 새 대화 시작 시 안전 설정 등을 포함하여 ChatSession 초기화 가능
-            # 예: safety_settings={'HARASSMENT': 'BLOCK_NONE'} 등
             self.user_conversations[user_id] = self.model.start_chat(history=[])
             logger.info(f"새로운 대화 세션 시작 (사용자: {interaction.user.name} [{user_id}])")
 
@@ -227,7 +217,7 @@ class GeminiCog(commands.Cog):
     async def reset_gemini_context(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         if user_id in self.user_conversations:
-            del self.user_conversations[user_id]  # ChatSession 객체 삭제
+            del self.user_conversations[user_id]
             logger.info(f"대화 기록 초기화 (사용자: {interaction.user.name} [{user_id}])")
             await interaction.response.send_message("✅ 당신의 AI 대화 기록이 성공적으로 초기화되었습니다. 새로운 대화를 시작할 수 있습니다.",
                                                     ephemeral=True)
@@ -253,25 +243,18 @@ class GeminiCog(commands.Cog):
             )
             return
 
-        # Discord의 기본 파일 크기 제한은 25MB (Nitro 사용자는 더 큼)
-        # Gemini API는 자체적인 제한이 있을 수 있음 (예: 이미지당 4MB 등 - 모델별 문서 확인)
-        # 여기서는 Discord의 일반적인 제한 내에서 처리하도록 함.
         if attachment.size > 20 * 1024 * 1024:  # 예시: 20MB 제한
             await interaction.response.send_message("파일 크기가 너무 큽니다 (최대 20MB).", ephemeral=True)
             return
 
-        # 공개 응답, defer thinking=True
         await interaction.response.defer(thinking=True, ephemeral=False)
 
         try:
             image_bytes = await attachment.read()
 
-            # Pillow를 사용하여 이미지 유효성 검사 및 메타데이터 제거 시도 (선택 사항)
             try:
                 with Image.open(io.BytesIO(image_bytes)) as img:
-                    img.verify()  # 이미지 파일이 유효한지 기본 검사
-                    # 필요한 경우 이미지 리사이징 또는 포맷 변경 등을 수행할 수 있음
-                    # img.save(output_buffer, format='PNG') 등
+                    img.verify()
             except Exception as img_e:
                 logger.error(f"잘못되거나 손상된 이미지 파일입니다: {img_e} (요청자: {interaction.user.name})")
                 await interaction.followup.send("⚠️ 첨부된 파일이 유효한 이미지 파일이 아니거나 손상되었습니다. 다른 파일을 시도해주세요.", ephemeral=True)
@@ -282,16 +265,15 @@ class GeminiCog(commands.Cog):
                 "data": image_bytes
             }
 
-            # 프롬프트가 제공되지 않은 경우, 이미지에 대한 일반적인 요청으로 설정
             prompt_to_send = prompt.strip() if prompt and prompt.strip() else "이 이미지에 대해 설명해주세요."
-
-            # 멀티모달 요청: [텍스트, 이미지] 또는 [이미지, 텍스트]
-            # 일반적으로 프롬프트가 먼저 오는 것이 자연스러움
             request_parts = [prompt_to_send, image_part]
 
-            await self._send_gemini_request(interaction, request_parts, ephemeral_response=False)
+            await self._send_gemini_request(interaction,
+                                            request_parts,
+                                            attachment_image_url=attachment.url,  # <<< URL 전달
+                                            ephemeral_response=False)
 
-        except discord.HTTPException as e:  # 파일 다운로드 실패 등 Discord 관련 HTTP 오류
+        except discord.HTTPException as e:
             logger.error(f"첨부 파일 처리 중 Discord 오류 발생: {e} (요청자: {interaction.user.name})", exc_info=True)
             await interaction.followup.send("죄송합니다, 첨부 파일을 처리하는 중 Discord 관련 오류가 발생했습니다. 😥", ephemeral=True)
         except Exception as e:
@@ -301,16 +283,14 @@ class GeminiCog(commands.Cog):
 
 async def setup(bot: commands.Bot):
     gemini_api_key = os.getenv("GEMINI_API_KEY")
-    cog_instance = GeminiCog(bot)  # Cog 인스턴스는 항상 생성
+    cog_instance = GeminiCog(bot)
 
     if not gemini_api_key:
         logger.error("🚨 GEMINI_API_KEY 환경 변수가 설정되지 않아 Gemini Cog의 기능이 매우 제한됩니다.")
-    # Cog는 추가하되, 모델 초기화 실패는 Cog 내부에서 처리
     await bot.add_cog(cog_instance)
 
     if cog_instance.model:
         logger.info(f"🚀 GeminiCog (모델: {cog_instance.model.model_name})가 봇에 성공적으로 추가되었습니다.")
     else:
-        # __init__에서 이미 API 키 부재 또는 모델 초기화 실패 로깅이 발생했을 것임
         logger.warning(
             f"⚠️ GeminiCog가 봇에 추가되었으나, Gemini 모델({cog_instance.model_name})이 제대로 초기화되지 않았을 수 있습니다. 로그를 확인해주세요.")
