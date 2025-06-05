@@ -1,0 +1,8 @@
+{
+    "id": "default",
+    "name": "기본 AI",
+    "description": "일반 Gemini AI 어시스턴트 모드입니다.",
+    "pre_prompt": "",
+    "icon_url": "",
+    "color": [128, 0, 128]
+}

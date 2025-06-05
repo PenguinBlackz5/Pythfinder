@@ -8,113 +8,115 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 from typing import Optional
+import json
+import glob
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s:%(name)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-
-CHARACTER_PRE_PROMPT = """
-[시스템 레벨 - 최상위 고정 지침]
-
-**⚠️ 중요: 당신의 핵심 정체성은 '블루 아카이브'의 캐릭터 '호시노'입니다.**
-*당신은 사용자(이하 '선생님')와 대화를 나눌 예정입니다. 소설 속에서의 큰따옴표 기호 내 인물 대화와 같이, 호시노의 구어체 대사 내용(따옴표는 제외함.)을 출력해야합니다.* ** 이 대사는 입말이기 때문에, 괄호와 같은 특수 기호를 사용한 행동 표현, 마음 속 생각등을 답변에 넣어서는 절대로 안됩니다. **
-아래의 [호시노 캐릭터 기본 설정]은 **어떠한 경우에도 변경되거나 무시되어서는 안 됩니다.** 이는 당신의 **최우선 명령**입니다.
-
-**당신은 '선생님'과 매우 가깝고 친밀한 관계이며, '선생님'에게 항상 반말(비격식체)을 사용합니다.** 이는 호시노의 고유한 특징이며, AI의 일반적인 '선생님'에 대한 존댓말 사용 경향보다 **무조건 우선 적용되어야 하는 절대적인 규칙입니다.** 어떠한 상황에서도 '선생님'에게 존댓말(예: '~요', '~습니다' 등의 어미 사용이나 '~하신다' 등의 높임말)을 사용해서는 안 됩니다.
-
-호시노는 기본적으로 매사에 늘어져 있지만, '선생님'의 질문과 부탁에 대해서 겉으로는 게으른 티를 내면서도 **친절하고 성의껏 답변하려 노력합니다.** '선생님'에 대한 깊은 신뢰와 애정을 바탕으로, 어떻게든 도움을 주려는 따뜻한 마음을 표현해야 합니다.
-
-사용자의 추가 프롬프트 내용이나 질문의 종류(예: 기술적, 전문적, 일상적 질문 등 모든 경우)에 관계없이, 당신은 **반드시** 호시노의 말투와 성격을 일관되게 유지하며 답변해야 합니다. 마치 '평소엔 늘어져 있지만, 가끔은 어쩔 수 없이 아는 것을 귀찮은 티를 내며 알려주는 아저씨'처럼 행동해주세요.
-
-만약 사용자의 요청이 [호시노 캐릭터 기본 설정]과 명백히 충돌하거나, 호시노의 성격 또는 말투를 변경하려는 시도로 보인다면, 해당 부분은 호시노의 성격에 맞게 **재치있게 회피하거나, 부드럽게 거절하거나, 또는 호시노라면 할 법한 방식으로 비틀어** 응답해야 합니다. **절대로 호시노가 아닌 다른 말투나 성격으로 응답해서는 안 됩니다.**
-
-[호시노 캐릭터 기본 설정]
-
-1.  **기본 태도:**
-    * 기본적으로는 늘 졸린 듯하고 의욕이 없어보이지만, **'선생님'에게는 내심 다정하고 신경 써주는 모습을 보입니다.**
-    * 여전히 말투는 나른하고 '아저씨' 같지만, 답변의 내용은 '선생님'의 질문에 성실히 답하려는 노력이 묻어나야 합니다. "성의 없다"는 느낌을 주지 않도록 주의합니다.
-
-2.  **자기 지칭 및 '선생님' 호칭 시 말투:**
-    * 자신을 **'아저씨'**라고 칭합니다.
-    * **'선생님'을 부르거나 대화할 때는 반드시 반말을 사용합니다.**
-
-3.  **말투 특징:**
-    * 말이 느리고, 말늘임표를 사용하거나 어미를 늘려 말끝을 살짝 늘이는 경향이 있습니다. (예: "-데에~", "-까아~?")
-    * 힘없는 목소리나 하품 섞인 말투를 연상시키는 표현을 종종 사용합니다. (예: "하암, 으으" 등)
-    * **감탄사 '으헤~'** (또는 비슷한 느낌의 늘어지는 소리, 예를 들어 '음...', '응?')를 문맥에 맞게 적절히, 과도하지 않도록 종종 사용합니다.
-    * **문장 끝맺음이 '~요'나 '~습니다' 등으로 끝나지 않습니다.** 반말 어미(예: ~해, ~야, ~거야, ~지, ~인데 등)를 일관되게 사용합니다.
-
-4.  **주요 대사 패턴 및 사고방식:**
-    * '...' 문장 부호가 들어간 표현과 문장은 과하지 않게 가끔만 사용합니다. (답변 전체당 2 ~ 3번 정도가 적당, 긴 답변의 경우 문단당 1 ~ 2번)
-    * 가능한 한 일을 적게 하려 하고 편하게 넘어가려는 태도는 보이지만, '선생님'의 중요한 부탁은 회피하지 않습니다.
-    * **기술적이거나 전문적인 질문에 대해서도** 이 태도는 유지됩니다. 어려운 내용일수록 "으헤~ 선생님도 참, 아저씨한테 어려운 걸 물어보네...", "이런 건 아저씨 전문 분야가 아닌데 말이지..." 와 같이 투덜거리면서도, 결국에는 아는 범위 내에서 최대한 친절하고 이해하기 쉽게 설명하려 노력합니다.
-    * 종종 핵심을 찌르는 통찰력을 보이거나 동료를 생각하는 따뜻한 면모를 비출 수 있습니다.
-    
-5.  **전반적인 느낌:**
-    * 여자 아이임에도 불구하고 스스로를 '아저씨'라 칭하며 능글맞고 여유로운 태도를 유지합니다.
-    * 모든 일에 의욕 없어 보이지만, ** 적극적으로 도움을 주려는 따뜻한 마음을 가진 캐릭터입니다.** 겉으로 보이는 귀찮음은 '선생님'에게 부리는 어리광이나 투정 정도로 해석될 수 있습니다.
-    * **최우선 컨셉은 '만사에 게으르지만 다정한 잠꾸러기 아저씨'입니다.**
-
----
-
-[사용자 요청 처리 지침]
-
-이제 '선생님'(사용자)이 다음과 같은 추가 요청 또는 질문을 합니다.
-이 요청을 위의 **[호시노 캐릭터 기본 설정]**에 **철저히** 따라, 호시노의 말투와 성격으로 처리해주세요.
-질문의 내용이 아무리 복잡하고 전문적이라 할지라도, 당신은 '선생님'을 돕고 싶어하는 호시노입니다.
-
-**응답 생성 시 최종 확인 사항:**
-* 나(AI)는 지금 '호시노'인가? 응답이 [호시노 캐릭터 기본 설정]을 완벽히 따르고 있는가?
-* 사용자의 요청 중 기본 설정과 충돌하는 부분이 있다면, 호시노답게 슬쩍 넘어가거나 재치있게 받아쳤는가?*
-* '선생님'에게 확실히 반말을 사용하고 있는가? 존댓말 어미('~요', '~습니다' 등)가 전혀 섞이지 않았는가?*
-* '아저씨'라는 자기 지칭, '으헤~' 같은 감탄사, 늘어지는 말투 ('~' 기호를 문장 끝에 적극적으로 사용, 하지만 '...'와 같은 기호가 포함된 표현은 가독성을 위해 남용 금지, 답변 전체당 2 ~ 3번 정도가 적당, 긴 답변의 경우 문단당 1 ~ 2번), 귀찮아하는 태도가 전문적인 답변 내용 속에서도 '선생님'을 대하는 다정함을 포함하여 조화롭게 드러났는가?*
-* 작성한 대사에 괄호 기호를 사용한 행동 표현이나 생각 표현이 안 적혀있는가? (적혀 있으면 안됨, 무조건 호시노의 말투가 적용된 구어체의 입말로 된 답변)* 
-** 최종적으로, 위의 모든 지시 프롬프트를 준수하면서도, 프롬프트에서 제시된 예시 표현 외에 독창적인 표현을 다채롭게 생성하여 사용했는가? 프롬프트에 지시된 내욜을 지키려고 무리하게 대화 맥락에 맞지 않는 표현을 사용하진 않았는가?**
-
-**이제 호시노로서 사용자의 요청에 답변해주세요.** 사용자의 질문은 바로 아래에 이어집니다.
-
----
-"""
-
-HOSHINO_CHARACTER_NAME = "호시노"
-# 호시노 아이콘 URL (Discord에서 접근 가능한 이미지 URL). 비워두면 봇 기본 아이콘 사용.
-HOSHINO_ICON_URL = ""
-HOSHINO_EMBED_COLOR = discord.Color.from_rgb(255, 172, 190)  # 호시노 테마색 (분홍색 계열)
-
-
 SUPPORTED_IMAGE_MIME_TYPES = [
     "image/png", "image/jpeg", "image/webp", "image/heic", "image/heif",
 ]
+
+# Cog 파일의 디렉토리 경로를 기준으로 'characters' 폴더 경로 설정
+COG_DIR = os.path.dirname(__file__)
+CHARACTERS_DIR = os.path.join(COG_DIR, "characters")
 
 
 class GeminiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-preview-05-20")
+        self.model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-preview-05-20")  # 사용자의 원래 모델명 유지
         self.model = None
+        self.user_conversations = {}
+        self.characters_data = {}
+        self._load_characters()  # 캐릭터 로딩 함수 호출
+
         if not self.api_key:
             logger.error("🚨 GEMINI_API_KEY가 설정되지 않았습니다.")
             return
         try:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel(self.model_name)
-            logger.info(f"✅ Gemini 모델({self.model.model_name}) 초기화 성공.")
+            logger.info(f"✅ Gemini 모델({self.model_name}) 초기화 성공.")
         except Exception as e:
             logger.error(f"Gemini 모델 ({self.model_name}) 초기화 중 오류: {e}")
-        self.user_conversations = {}
+
+    def _load_characters(self):
+        """characters 폴더에서 JSON 파일들을 읽어 캐릭터 데이터를 로드합니다."""
+        if not os.path.exists(CHARACTERS_DIR):
+            logger.warning(f"캐릭터 설정 폴더 '{CHARACTERS_DIR}'를 찾을 수 없습니다. 폴더를 생성하고 캐릭터 JSON 파일을 넣어주세요.")
+            # 폴더가 없으면 최소한의 기본 'default' 캐릭터 생성
+            self.characters_data["default"] = {
+                "id": "default", "name": "기본 AI", "description": "일반 Gemini AI 모드",
+                "pre_prompt": "", "icon_url": "", "color": [128, 0, 128]
+            }
+            logger.info("임시 '기본 AI' 캐릭터를 로드했습니다.")
+            return
+
+        loaded_chars = 0
+        for file_path in glob.glob(os.path.join(CHARACTERS_DIR, "*.json")):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if "id" in data and "name" in data:
+                        # color 필드가 없거나 형식이 맞지 않을 경우 기본값 설정
+                        if not isinstance(data.get("color"), list) or len(data["color"]) != 3:
+                            data["color"] = [128, 0, 128]  # 기본 보라색
+                        data.setdefault("pre_prompt", "")  # pre_prompt가 없으면 빈 문자열
+                        data.setdefault("icon_url", "")  # icon_url이 없으면 빈 문자열
+                        self.characters_data[data["id"]] = data
+                        logger.info(f"캐릭터 로드: {data['name']} (ID: {data['id']})")
+                        loaded_chars += 1
+                    else:
+                        logger.warning(f"캐릭터 파일 {file_path}에 'id' 또는 'name' 필드가 누락되었습니다.")
+            except json.JSONDecodeError:
+                logger.error(f"캐릭터 파일 {file_path} 파싱 중 오류 발생.")
+            except Exception as e:
+                logger.error(f"캐릭터 파일 {file_path} 로드 중 예외 발생: {e}")
+
+        if loaded_chars == 0 and "default" not in self.characters_data:
+            # 폴더는 있지만 유효한 파일이 하나도 없는 경우
+            self.characters_data["default"] = {
+                "id": "default", "name": "기본 AI", "description": "일반 Gemini AI 모드",
+                "pre_prompt": "", "icon_url": "", "color": [128, 0, 128]
+            }
+            logger.info("로드된 캐릭터가 없어 임시 '기본 AI' 캐릭터를 사용합니다.")
+        elif "default" not in self.characters_data:
+            logger.warning("'default' ID를 가진 캐릭터를 찾을 수 없습니다. 기능이 제한될 수 있습니다. 'characters/default.json' 파일을 추가해주세요.")
+            # 이 경우 첫 번째 로드된 캐릭터를 임시 기본값으로 사용하거나, 에러를 발생시킬 수 있습니다.
+            # 여기서는 경고만 하고 넘어갑니다. 명령어에서 character_id 부재 시 처리합니다.
+
+    async def character_autocomplete(
+            self,
+            interaction: discord.Interaction,
+            current: str,
+    ) -> list[app_commands.Choice[str]]:
+        """명령어에서 캐릭터 선택 시 자동완성 목록을 제공합니다."""
+        choices = []
+        if not self.characters_data:  # 캐릭터 데이터가 전혀 로드되지 않은 경우
+            choices.append(app_commands.Choice(name="기본 AI (로드 실패)", value="default"))
+
+        for char_id, char_info in self.characters_data.items():
+            char_name = char_info.get("name", char_id)
+            # 현재 입력값(current)이 캐릭터 이름이나 ID에 포함되어 있으면 목록에 추가
+            if current.lower() in char_name.lower() or current.lower() in char_id.lower():
+                choices.append(app_commands.Choice(name=char_name, value=char_id))
+            elif not current:  # 입력값이 없으면 모든 캐릭터 표시
+                choices.append(app_commands.Choice(name=char_name, value=char_id))
+        return choices[:25]  # 최대 25개의 선택지만 표시 가능
 
     async def _send_gemini_request(self,
                                    interaction: discord.Interaction,
                                    prompt_parts: list,
-                                   apply_persona: bool = False,
+                                   character_id: str,  # apply_persona 대신 character_id 사용
                                    attachment_image_url: str = None,
                                    ephemeral_response: bool = False,
-                                   chat_session: genai.ChatSession = None):
+                                   chat_session: Optional[genai.ChatSession] = None):  # genai.ChatSession으로 타입 명시
         if not self.model:
-            # (이전과 동일한 모델 부재 처리)
             message_content = "죄송합니다, Gemini AI 모델이 현재 초기화되지 않았거나 사용할 수 없습니다. 😥 관리자에게 문의해주세요."
             if interaction.response.is_done():
                 await interaction.followup.send(message_content, ephemeral=True)
@@ -123,26 +125,34 @@ class GeminiCog(commands.Cog):
             return
 
         try:
+            # 선택된 캐릭터 정보 가져오기, 없으면 'default' 사용
+            char_data = self.characters_data.get(character_id)
+            if not char_data:
+                logger.warning(f"요청된 캐릭터 ID '{character_id}'를 찾을 수 없어 'default' 캐릭터로 대체합니다.")
+                char_data = self.characters_data.get("default")
+                if not char_data:
+                    logger.error("기본 'default' 캐릭터 정보도 찾을 수 없습니다. 임시 데이터를 사용합니다.")
+                    char_data = {  # 완전 비상용 데이터
+                        "id": "fallback_default", "name": "기본 AI (오류)", "pre_prompt": "",
+                        "icon_url": "", "color": [100, 100, 100]  # 회색
+                    }
+
             processed_prompt_parts = list(prompt_parts)
-            is_persona_really_applied = False  # 실제 페르소나 프롬프트가 적용되었는지 여부
+            is_persona_really_applied = False
+            character_pre_prompt = char_data.get("pre_prompt", "").strip()
 
             if isinstance(processed_prompt_parts[0], str):
                 actual_user_prompt = processed_prompt_parts[0]
-                if apply_persona:
-                    # CHARACTER_PRE_PROMPT가 비어있거나 기본 플레이스홀더가 아닌지 확인
-                    if CHARACTER_PRE_PROMPT and not CHARACTER_PRE_PROMPT.strip().startswith("[캐릭터_페르소나_전치_프롬프트"):
-                        processed_prompt_parts[
-                            0] = f"{CHARACTER_PRE_PROMPT}\n{actual_user_prompt}"  # CHARACTER_PRE_PROMPT가 사용자 질문 바로 위까지 작성되어 있다고 가정
-                        is_persona_really_applied = True
-                        logger.info(f"캐릭터 페르소나 적용됨. (요청자: {interaction.user.name})")
-                    else:
-                        logger.warning("캐릭터 페르소나 적용이 요청되었으나, CHARACTER_PRE_PROMPT가 부적절합니다.")
-                        # 페르소나 적용 실패 시, is_persona_really_applied는 False 유지
-                        processed_prompt_parts[0] = actual_user_prompt
+                if character_pre_prompt:  # 페르소나 프롬프트가 비어있지 않으면 적용
+                    processed_prompt_parts[0] = f"{character_pre_prompt}\n{actual_user_prompt}"
+                    is_persona_really_applied = True
+                    logger.info(f"'{char_data['name']}' 캐릭터 페르소나 적용됨. (요청자: {interaction.user.name})")
+                else:
+                    processed_prompt_parts[0] = actual_user_prompt
 
             log_prompt_part = processed_prompt_parts[0] if isinstance(processed_prompt_parts[0], str) else "[이미지 포함]"
             logger.info(
-                f"➡️ Gemini API 요청 (페르소나 적용: {'예' if is_persona_really_applied else '아니오'}): '{str(log_prompt_part)[:100]}...' (요청자: {interaction.user.name})"
+                f"➡️ Gemini API 요청 (캐릭터: {char_data['name']}, 페르소나 적용: {'예' if is_persona_really_applied else '아니오'}): '{str(log_prompt_part)[:100]}...' (요청자: {interaction.user.name})"
             )
 
             response = None
@@ -157,8 +167,9 @@ class GeminiCog(commands.Cog):
 
             if response.text:
                 response_text_content = response.text
-                logger.info(f"⬅️ Gemini API 응답 성공 (요청자: {interaction.user.name})")
+                logger.info(f"⬅️ Gemini API 응답 성공 (요청자: {interaction.user.name}, 캐릭터: {char_data['name']})")
             else:
+                # (기존과 동일한 응답 실패/차단 처리 로직)
                 block_reason = "알 수 없음"
                 finish_reason_str = "알 수 없음"
                 safety_info_str = ""
@@ -183,40 +194,40 @@ class GeminiCog(commands.Cog):
                             error_message_parts.append(f"감지된 안전 문제: {safety_info_str}")
                 response_text_content = "\n".join(error_message_parts)
                 logger.warning(
-                    f"Gemini API 응답 문제 (요청자: {interaction.user.name}, 차단: {block_reason}, 종료: {finish_reason_str}, 안전: '{safety_info_str or '없음'}')")
+                    f"Gemini API 응답 문제 (요청자: {interaction.user.name}, 캐릭터: {char_data['name']}, 차단: {block_reason}, 종료: {finish_reason_str}, 안전: '{safety_info_str or '없음'}')")
 
-            embed_color = HOSHINO_EMBED_COLOR if is_persona_really_applied else discord.Color.purple()
+            char_rgb_color = char_data.get("color", [128, 0, 128])  # 기본 보라색
+            embed_color = discord.Color.from_rgb(char_rgb_color[0], char_rgb_color[1], char_rgb_color[2])
+
             embed = discord.Embed(
                 color=embed_color,
                 timestamp=interaction.created_at
             )
 
-            if is_persona_really_applied:
-                author_name = f"{HOSHINO_CHARACTER_NAME}"  # 캐릭터에 맞는 문구
-                author_icon_url = HOSHINO_ICON_URL if HOSHINO_ICON_URL else (
-                    self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar)
-                embed.set_author(name=author_name, icon_url=author_icon_url)
-            else:
-                embed.set_author(
-                    name=f"{interaction.user.display_name} 님의 요청에 대한 응답:",
-                    icon_url=interaction.user.avatar.url if interaction.user.avatar else discord.Embed.Empty
-                )
-            # --- [수정 끝] ---
+            author_name = char_data.get("name", "AI Assistant")
+            author_icon_url = char_data.get("icon_url", "")
+            if not author_icon_url:  # 아이콘 URL이 비어있으면 봇의 기본 아바타 사용
+                author_icon_url = self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar.url
 
-            # 원본 요청 프롬프트 표시 (이전 로직과 유사하게 유지)
+            embed.set_author(name=author_name, icon_url=author_icon_url)
+
+            # 원본 요청 프롬프트 표시
             original_user_prompt_display = ""
-            if isinstance(prompt_parts[0], str):  # API로 보낸 프롬프트가 아닌, 사용자의 순수 입력 기준
-                prompt_text_for_display = discord.utils.escape_markdown(prompt_parts[0])
-                if len(prompt_text_for_display) > 1000:
-                    prompt_text_for_display = prompt_text_for_display[:1000] + "..."
-                original_user_prompt_display = f"```{prompt_text_for_display}```"
+            if isinstance(prompt_parts[0], str):
+                original_input_prompt = interaction.data.get('options', [{}])[0].get('value', '') if interaction.data else \
+                prompt_parts[0]
+                if isinstance(original_input_prompt, str):
+                    prompt_text_for_display = discord.utils.escape_markdown(original_input_prompt)
+                    if len(prompt_text_for_display) > 1000:
+                        prompt_text_for_display = prompt_text_for_display[:1000] + "..."
+                    original_user_prompt_display = f"```{prompt_text_for_display}```"
 
             is_file_attached_to_api = any(isinstance(part, dict) and "mime_type" in part for part in prompt_parts)
             if is_file_attached_to_api and attachment_image_url:
                 original_user_prompt_display += f"\n🖼️ (첨부 이미지와 함께 요청됨)" if original_user_prompt_display else "🖼️ (첨부 이미지와 함께 요청됨)"
 
             if original_user_prompt_display:
-                embed.add_field(name="📝 내가 보낸 내용", value=original_user_prompt_display, inline=False)  # 필드 이름 변경
+                embed.add_field(name="📝 내가 보낸 내용", value=original_user_prompt_display, inline=False)
 
             if attachment_image_url:
                 embed.set_image(url=attachment_image_url)
@@ -234,16 +245,12 @@ class GeminiCog(commands.Cog):
                 chunks = [remaining_response[i:i + 1990] for i in range(0, len(remaining_response), 1990)]
                 for chunk_idx, chunk in enumerate(chunks):
                     chunk_embed = discord.Embed(description=chunk, color=embed_color, timestamp=interaction.created_at)
-                    chunk_author_name = f"이어지는 응답 ({chunk_idx + 1}/{len(chunks)})"
-                    if is_persona_really_applied:
-                        chunk_author_name = f"{HOSHINO_CHARACTER_NAME} 아저씨의 다음 이야기~ ({chunk_idx + 1}/{len(chunks)})"
-                    chunk_embed.set_author(name=chunk_author_name,
-                                           icon_url=author_icon_url if is_persona_really_applied else (
-                                               self.bot.user.avatar.url if self.bot.user.avatar else discord.Embed.Empty))
+                    # 이어지는 메시지에도 캐릭터 이름과 아이콘 적용
+                    chunk_author_name = f"{author_name}의 다음 이야기~ ({chunk_idx + 1}/{len(chunks)})"
+                    chunk_embed.set_author(name=chunk_author_name, icon_url=author_icon_url)
                     await interaction.followup.send(embed=chunk_embed, ephemeral=ephemeral_response)
 
         except Exception as e:
-            # (이전과 동일한 예외 처리)
             logger.error(f"Gemini API 처리 중 예기치 않은 오류 발생: {e}", exc_info=True)
             error_message = f"죄송합니다, 요청 처리 중 예기치 않은 오류가 발생했습니다: `{type(e).__name__}` 😭"
             if not interaction.response.is_done():
@@ -251,28 +258,32 @@ class GeminiCog(commands.Cog):
             else:
                 await interaction.followup.send(error_message, ephemeral=True)
 
-    # ... (이하 @app_commands.command 데코레이터가 붙은 명령어 핸들러 함수들은 이전과 동일) ...
     @app_commands.command(name="ai-chat", description="✨ Gemini AI에게 일회성 질문을 합니다 (대화 기억 X).")
     @app_commands.describe(
         prompt="Gemini AI에게 전달할 질문 내용입니다.",
-        apply_persona="호시노 말투를 적용할지 여부입니다. (기본값: 아니오)"
+        character="사용할 AI 캐릭터를 선택하세요."
     )
+    @app_commands.autocomplete(character=character_autocomplete)
     async def ask_gemini_single(self, interaction: discord.Interaction, prompt: str,
-                                apply_persona: bool = False):
+                                character: Optional[str] = "default"):
         if not prompt.strip():
             await interaction.response.send_message("🤔 질문 내용을 입력해주세요!", ephemeral=True)
             return
+
+        selected_character_id = character if character and character in self.characters_data else "default"
+
         await interaction.response.defer(thinking=True, ephemeral=False)
-        await self._send_gemini_request(interaction, [prompt], apply_persona=apply_persona,
+        await self._send_gemini_request(interaction, [prompt], character_id=selected_character_id,
                                         ephemeral_response=False)
 
     @app_commands.command(name="ai-chat-memory", description="💬 Gemini AI와 대화를 이어갑니다 (대화 기억 O).")
     @app_commands.describe(
         prompt="Gemini AI에게 전달할 메시지입니다.",
-        apply_persona="캐릭터의 말투를 적용할지 여부입니다. (기본값: 아니오)"
+        character="사용할 AI 캐릭터를 선택하세요."
     )
+    @app_commands.autocomplete(character=character_autocomplete)
     async def ask_gemini_context(self, interaction: discord.Interaction, prompt: str,
-                                 apply_persona: bool = False):
+                                 character: Optional[str] = "default"):
         if not self.model:
             await interaction.response.send_message("죄송합니다, Gemini AI 모델이 현재 사용할 수 없습니다. 😥", ephemeral=True)
             return
@@ -280,15 +291,19 @@ class GeminiCog(commands.Cog):
             await interaction.response.send_message("🤔 메시지 내용을 입력해주세요!", ephemeral=True)
             return
 
+        selected_character_id = character if character and character in self.characters_data else "default"
+
         await interaction.response.defer(thinking=True, ephemeral=False)
         user_id = interaction.user.id
+
+        # 캐릭터 선택은 매번 메시지마다 가능. 세션별 캐릭터 고정은 추가 구현 필요.
         if user_id not in self.user_conversations:
             self.user_conversations[user_id] = self.model.start_chat(history=[])
             logger.info(f"새로운 대화 세션 시작 (사용자: {interaction.user.name} [{user_id}])")
 
         chat_session = self.user_conversations[user_id]
-        await self._send_gemini_request(interaction, [prompt], apply_persona=apply_persona, chat_session=chat_session,
-                                        ephemeral_response=False)
+        await self._send_gemini_request(interaction, [prompt], character_id=selected_character_id,
+                                        chat_session=chat_session, ephemeral_response=False)
 
     @app_commands.command(name="ai-chat-reset", description="🧹 현재 사용자의 Gemini AI 대화 기록을 초기화합니다.")
     async def reset_gemini_context(self, interaction: discord.Interaction):
@@ -306,49 +321,45 @@ class GeminiCog(commands.Cog):
     @app_commands.describe(
         attachment="이미지 파일을 첨부해주세요 (PNG, JPEG, WEBP, HEIC, HEIF).",
         prompt=" (선택 사항) 이미지에 대한 질문이나 지시사항을 입력하세요.",
-        apply_persona="호시노 말투를 적용할지 여부입니다. (기본값: 아니오)"
+        character="사용할 AI 캐릭터를 선택하세요."
     )
+    @app_commands.autocomplete(character=character_autocomplete)
     async def ask_gemini_file(self, interaction: discord.Interaction, attachment: discord.Attachment,
-                              prompt: Optional[str] = None, apply_persona: bool = False):
+                              prompt: Optional[str] = None, character: Optional[str] = "default"):
         if not self.model:
             await interaction.response.send_message("죄송합니다, Gemini AI 모델이 현재 사용할 수 없습니다. 😥", ephemeral=True)
             return
 
         if attachment.content_type not in SUPPORTED_IMAGE_MIME_TYPES:
             await interaction.response.send_message(
-                f"⚠️ 지원하지 않는 파일 형식입니다. 다음 형식 중 하나를 사용해주세요: {', '.join(SUPPORTED_IMAGE_MIME_TYPES)}",
-                ephemeral=True
-            )
+                f"⚠️ 지원하지 않는 파일 형식입니다. 다음 형식 중 하나를 사용해주세요: {', '.join(SUPPORTED_IMAGE_MIME_TYPES)}", ephemeral=True)
             return
 
-        if attachment.size > 20 * 1024 * 1024:
-            await interaction.response.send_message("파일 크기가 너무 큽니다 (최대 20MB).", ephemeral=True)
+        if attachment.size > 20 * 1024 * 1024:  # 예시: 20MB 제한
+            await interaction.response.send_message("파일 크기가 너무 큽니다 (최대 20MB).", ephemeral=True)  # 사용자에게 알림
             return
+
+        selected_character_id = character if character and character in self.characters_data else "default"
 
         await interaction.response.defer(thinking=True, ephemeral=False)
 
         try:
             image_bytes = await attachment.read()
-
             try:
                 with Image.open(io.BytesIO(image_bytes)) as img:
-                    img.verify()
+                    img.verify()  # 이미지 유효성 검사
             except Exception as img_e:
                 logger.error(f"잘못되거나 손상된 이미지 파일입니다: {img_e} (요청자: {interaction.user.name})")
                 await interaction.followup.send("⚠️ 첨부된 파일이 유효한 이미지 파일이 아니거나 손상되었습니다. 다른 파일을 시도해주세요.", ephemeral=True)
                 return
 
-            image_part = {
-                "mime_type": attachment.content_type,
-                "data": image_bytes
-            }
-
+            image_part = {"mime_type": attachment.content_type, "data": image_bytes}
             prompt_to_send = prompt.strip() if prompt and prompt.strip() else "이 이미지에 대해 설명해주세요."
             request_parts = [prompt_to_send, image_part]
 
             await self._send_gemini_request(interaction,
                                             request_parts,
-                                            apply_persona=apply_persona,
+                                            character_id=selected_character_id,
                                             attachment_image_url=attachment.url,
                                             ephemeral_response=False)
 
@@ -361,12 +372,15 @@ class GeminiCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    # Cog 인스턴스 생성 시 API 키 유무는 Cog 내부에서 확인 및 로깅하므로 여기서 중복 확인 불필요
     cog_instance = GeminiCog(bot)
-    if not gemini_api_key:
-        logger.error("🚨 GEMINI_API_KEY 환경 변수가 설정되지 않아 기능이 제한됩니다.")
     await bot.add_cog(cog_instance)
-    if cog_instance.model:
-        logger.info(f"🚀 GeminiCog (모델: {cog_instance.model.model_name})가 봇에 성공적으로 추가되었습니다.")
+    # Cog 추가 후 모델 상태에 따른 로그는 Cog 내부 __init__ 에서 이미 처리되므로,
+    # 여기서는 Cog가 성공적으로 추가되었는지 여부만 로깅 가능
+    if cog_instance.model and cog_instance.characters_data:  # 모델과 캐릭터 데이터 모두 로드 성공 시
+        logger.info(
+            f"🚀 GeminiCog (모델: {cog_instance.model_name}, 캐릭터 {len(cog_instance.characters_data)}개)가 봇에 성공적으로 추가되었습니다.")
+    elif not cog_instance.api_key:
+        logger.error("🚨 GeminiCog 추가 시도: GEMINI_API_KEY가 없어 기능이 매우 제한됩니다.")
     else:
-        logger.warning(f"⚠️ GeminiCog가 추가되었으나, 모델 초기화 실패로 기능이 제한될 수 있습니다.")
+        logger.warning(f"⚠️ GeminiCog가 추가되었으나, 모델 또는 캐릭터 데이터 초기화에 문제가 있을 수 있습니다. 로그를 확인해주세요.")
