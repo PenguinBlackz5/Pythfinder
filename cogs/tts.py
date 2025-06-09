@@ -1,45 +1,126 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from elevenlabs import Voice, VoiceSettings
-from elevenlabs.client import ElevenLabs
+from google import genai
+from google.genai import types
 import os
 from dotenv import load_dotenv
 import io
+import wave
+import asyncio
+import logging
 
+# .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
 
-# ElevenLabs 클라이언트 초기화
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-if not ELEVENLABS_API_KEY:
-    print("경고: ELEVENLABS_API_KEY 환경 변수가 설정되지 않았습니다. TTS 기능이 작동하지 않을 수 있습니다.")
+# Google Gemini 클라이언트 초기화
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    print("경고: GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. TTS 기능이 작동하지 않을 수 있습니다.")
     client = None
 else:
-    client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Google Gemini TTS에서 사용 가능한 음성 목록
+AVAILABLE_VOICES = {
+    # 밝은 계열
+    'Zephyr': '밝음',
+    'Autonoe': '밝음',
+    'Leda': '젊음',
+
+    # 경쾌한 계열
+    'Puck': '경쾌함',
+    'Aoede': '상쾌함',
+    'Laomedeia': '경쾌함',
+
+    # 차분한 계열
+    'Kore': '확고함',
+    'Charon': '정보 제공',
+    'Iapetus': '명확함',
+    'Erinome': '명확함',
+    'Schedar': '균등함',
+
+    # 부드러운 계열
+    'Callirrhoe': '호락호락',
+    'Algieba': '부드러움',
+    'Despina': '부드러움',
+    'Achernar': '부드러움',
+    'Vindemiatrix': '부드러움',
+
+    # 친근한 계열
+    'Umbriel': '호의적',
+    'Achird': '친근함',
+    'Sulafat': '따뜻함',
+
+    # 활기찬 계열
+    'Fenrir': '흥분',
+    'Sadachbia': '활기참',
+
+    # 전문적인 계열
+    'Orus': '회사',
+    'Gacrux': '성인용',
+    'Sadaltager': '전문 지식',
+    'Rasalgethi': '유용한 정보',
+
+    # 특별한 계열
+    'Enceladus': '숨소리',
+    'Algenib': '자갈',
+    'Alnilam': '확실함',
+    'Pulcherrima': '앞으로',
+    'Zubenelgenubi': '캐주얼'
+}
 
 
 class TTSCog(commands.Cog):
     """
-    ElevenLabs API를 사용하여 텍스트를 음성으로 변환하는 기능을 담은 Cog입니다.
+    Google Gemini API를 사용하여 텍스트를 음성으로 변환하는 기능을 담은 Cog입니다.
     """
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._voices_cache = None  # 목소리 목록을 캐싱하기 위한 변수
 
-    async def _get_voice_id(self, voice_name: str) -> str | None:
-        """목소리 이름으로 Voice ID를 찾습니다. 캐시를 활용하여 API 호출을 줄입니다."""
-        if self._voices_cache is None:
-            try:
-                self._voices_cache = client.voices.get_all().voices
-            except Exception as e:
-                print(f"목소리 목록 캐싱 실패: {e}")
-                return None
+    async def _generate_tts_async(self, text: str, voice: str):
+        """TTS 생성을 비동기로 처리합니다."""
+        loop = asyncio.get_event_loop()
 
-        for voice in self._voices_cache:
-            if voice.name.lower() == voice_name.lower():
-                return voice.voice_id
-        return None
+        def generate_tts():
+            # 단일 화자 설정
+            return client.models.generate_content(
+                model="gemini-2.5-flash-preview-tts",
+                contents=text,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=voice,
+                            )
+                        )
+                    ),
+                )
+            )
+
+        return await loop.run_in_executor(None, generate_tts)
+
+    def _create_wave_file(self, pcm_data, channels=1, rate=24000, sample_width=2):
+        """PCM 데이터를 WAV 파일로 변환합니다."""
+        audio_buffer = io.BytesIO()
+        with wave.open(audio_buffer, "wb") as wf:
+            wf.setnchannels(channels)
+            wf.setsampwidth(sample_width)
+            wf.setframerate(rate)
+            wf.writeframes(pcm_data)
+        audio_buffer.seek(0)
+        return audio_buffer
+
+    # 자동완성 함수
+    async def voice_autocomplete(self, interaction: discord.Interaction, current: str):
+        """음성 이름 자동완성"""
+        return [
+                   app_commands.Choice(name=f"{voice} ({description})", value=voice)
+                   for voice, description in AVAILABLE_VOICES.items()
+                   if current.lower() in voice.lower() or current.lower() in description.lower()
+               ][:25]  # Discord 제한: 최대 25개
 
     @app_commands.command(name="join", description="봇을 현재 음성 채널에 참여시킵니다.")
     async def join(self, interaction: discord.Interaction):
@@ -62,21 +143,34 @@ class TTSCog(commands.Cog):
             await interaction.response.send_message(f"`{voice_channel.name}` 채널에 참여했습니다.")
 
     @app_commands.command(name="say", description="봇이 음성 채널에서 텍스트를 말하게 합니다.")
+    @app_commands.choices(emotion=[
+        app_commands.Choice(name='기본', value=''),
+        app_commands.Choice(name='차분하게', value='calmly'),
+        app_commands.Choice(name='화난듯이', value='angrily'),
+        app_commands.Choice(name='슬프게', value='sadly'),
+        app_commands.Choice(name='행복하게', value='happily'),
+        app_commands.Choice(name='신나게', value='excitedly'),
+        app_commands.Choice(name='속삭이듯이', value='in a whisper'),
+        app_commands.Choice(name='무섭게', value='in a spooky way'),
+        app_commands.Choice(name='피곤하게', value='tiredly'),
+        app_commands.Choice(name='열정적으로', value='enthusiastically')
+    ])
+    @app_commands.autocomplete(voice=voice_autocomplete)
     @app_commands.describe(
         text="봇이 말할 내용을 입력하세요.",
-        voice="사용할 목소리 이름 (기본: Alice)",
-        stability="목소리 안정성 (0.0 ~ 1.0)",
-        similarity_boost="유사성 증폭 (0.0 ~ 1.0)"
+        emotion="목소리에 적용할 감정을 선택하세요.",
+        custom_emotion="직접 감정/표현을 입력합니다 (예: '나른하게'). 이 옵션 사용 시, '감정' 선택은 무시됩니다.",
+        voice="사용할 목소리 이름 (기본: Kore)"
     )
     async def say(self,
                   interaction: discord.Interaction,
                   text: str,
-                  voice: str = "Alice",
-                  stability: app_commands.Range[float, 0.0, 1.0] = None,
-                  similarity_boost: app_commands.Range[float, 0.0, 1.0] = None):
+                  emotion: str = '',
+                  custom_emotion: str = None,
+                  voice: str = "Kore"):
         """입력된 텍스트를 음성으로 변환하여 채널에서 재생합니다."""
         if client is None:
-            await interaction.response.send_message("오류: ElevenLabs 클라이언트가 초기화되지 않았습니다. 봇 관리자는 API 키 설정을 확인해주세요.",
+            await interaction.response.send_message("오류: Google Gemini 클라이언트가 초기화되지 않았습니다. 봇 관리자는 API 키 설정을 확인해주세요.",
                                                     ephemeral=True)
             return
 
@@ -93,47 +187,64 @@ class TTSCog(commands.Cog):
         await interaction.response.defer()
 
         try:
-            # 목소리 이름으로 Voice ID를 조회
-            voice_id = await self._get_voice_id(voice)
-            if not voice_id:
-                await interaction.followup.send(f"`{voice}`라는 목소리를 찾을 수 없습니다. `/voices` 명령어로 사용 가능한 목소리를 확인해주세요.",
+            # 음성 이름 검증
+            if voice not in AVAILABLE_VOICES:
+                await interaction.followup.send(f"`{voice}`는 사용할 수 없는 목소리입니다. `/voices` 명령어로 사용 가능한 목소리를 확인해주세요.",
                                                 ephemeral=True)
                 return
 
-            voice_settings = None
-            if stability is not None or similarity_boost is not None:
-                voice_settings = VoiceSettings(
-                    stability=stability if stability is not None else 0.75,
-                    similarity_boost=similarity_boost if similarity_boost is not None else 0.75
-                )
+            # 감정 적용된 최종 텍스트 생성
+            final_text = text
+            display_emotion_name = None
 
-            audio_iterator = client.text_to_speech.convert(
-                text=text,
-                voice_id=voice_id,
-                model_id="eleven_multilingual_v2",
-                voice_settings=voice_settings
-            )
+            # 커스텀 감정이 입력되면 최우선으로 적용
+            if custom_emotion:
+                final_text = f"Say {custom_emotion}: {text}"
+                display_emotion_name = custom_emotion
+            # 커스텀 감정이 없고, 드롭다운에서 기본값이 아닌 감정을 선택했을 때 적용
+            elif emotion and emotion != '':
+                final_text = f"Say {emotion}: {text}"
+                # 감정 선택지에서 name 값 찾기
+                emotion_param = discord.utils.get(self.say.parameters, name='emotion')
+                if emotion_param:
+                    choice = discord.utils.get(emotion_param.choices, value=emotion)
+                    if choice:
+                        display_emotion_name = choice.name
 
-            audio_data = b"".join(audio_iterator)
+            # TTS 생성을 비동기로 처리
+            response = await self._generate_tts_async(final_text, voice)
+
+            # 오디오 데이터 추출
+            audio_data = response.candidates[0].content.parts[0].inline_data.data
 
             if not audio_data:
                 await interaction.followup.send("음성 데이터를 생성하는 데 실패했습니다. API 키 또는 입력 내용을 확인해주세요.", ephemeral=True)
                 return
 
-            audio_source = io.BytesIO(audio_data)
+            # PCM 데이터를 WAV 파일로 변환 (비동기 처리)
+            loop = asyncio.get_event_loop()
+            audio_source = await loop.run_in_executor(None, self._create_wave_file, audio_data)
 
+            # Discord에서 재생
             voice_client.play(
                 discord.FFmpegPCMAudio(source=audio_source, pipe=True),
-                after=lambda e: print(f'재생 완료. 오류: {e}' if e else None)
+                after=lambda e: logging.error(f'재생 오류: {e}') if e else logging.info('재생 완료')
             )
 
-            await interaction.followup.send(f"🔊 **{voice}**: {text}")
+            # 응답 메시지 생성
+            response_message = f"🔊 **{voice}** ({AVAILABLE_VOICES[voice]}): {text}"
+            if display_emotion_name:
+                response_message = f"😊 **{display_emotion_name}** | " + response_message
+
+            await interaction.followup.send(response_message)
 
         except Exception as e:
-            print(f"ElevenLabs TTS 기능에서 오류 발생: {e}")
+            print(f"Google Gemini TTS 기능에서 오류 발생: {e}")
             error_message = str(e).lower()
-            if "unauthenticated" in error_message:
+            if "api key" in error_message or "unauthorized" in error_message:
                 await interaction.followup.send("API 키가 잘못되었거나 설정되지 않았습니다. 봇 관리자에게 문의해주세요.", ephemeral=True)
+            elif "quota" in error_message or "limit" in error_message:
+                await interaction.followup.send("API 사용량이 초과되었습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
             else:
                 await interaction.followup.send("음성을 재생하는 동안 오류가 발생했습니다. 봇 로그를 확인해주세요.", ephemeral=True)
 
@@ -149,46 +260,90 @@ class TTSCog(commands.Cog):
         await voice_client.disconnect()
         await interaction.response.send_message("음성 채널에서 나갔습니다.")
 
-    @app_commands.command(name="voices", description="사용 가능한 ElevenLabs 목소리 목록을 보여줍니다.")
+    @app_commands.command(name="voices", description="사용 가능한 Google Gemini TTS 목소리 목록을 보여줍니다.")
     async def voices(self, interaction: discord.Interaction):
-        """API를 통해 사용 가능한 목소리 목록을 가져와 보여줍니다."""
-        if client is None:
-            await interaction.response.send_message("오류: ElevenLabs 클라이언트가 초기화되지 않았습니다. 봇 관리자는 API 키 설정을 확인해주세요.",
-                                                    ephemeral=True)
-            return
+        """사용 가능한 목소리 목록을 보여줍니다."""
+        embed = discord.Embed(
+            title="🎤 Google Gemini TTS 목소리 목록",
+            description="`/say` 명령어의 `voice` 옵션에 아래 이름을 사용하세요.",
+            color=discord.Color.blue()
+        )
 
-        await interaction.response.defer(ephemeral=True)
-        try:
-            self._voices_cache = client.voices.get_all().voices
-            if not self._voices_cache:
-                await interaction.followup.send("사용 가능한 목소리를 찾을 수 없습니다.", ephemeral=True)
-                return
+        # 카테고리별로 정리
+        categories = {
+            "밝은 계열": ["Zephyr", "Autonoe", "Leda"],
+            "경쾌한 계열": ["Puck", "Aoede", "Laomedeia"],
+            "차분한 계열": ["Kore", "Charon", "Iapetus", "Erinome", "Schedar"],
+            "부드러운 계열": ["Callirrhoe", "Algieba", "Despina", "Achernar", "Vindemiatrix"],
+            "친근한 계열": ["Umbriel", "Achird", "Sulafat"],
+            "활기찬 계열": ["Fenrir", "Sadachbia"],
+            "전문적인 계열": ["Orus", "Gacrux", "Sadaltager", "Rasalgethi"],
+            "특별한 계열": ["Enceladus", "Algenib", "Alnilam", "Pulcherrima", "Zubenelgenubi"]
+        }
 
-            embed = discord.Embed(
-                title="🎤 ElevenLabs 목소리 목록",
-                description="`/say` 명령어의 `voice` 옵션에 아래 이름을 사용하세요.",
-                color=discord.Color.teal()
+        for category, voice_list in categories.items():
+            voice_descriptions = []
+            for voice in voice_list:
+                description = AVAILABLE_VOICES.get(voice, "")
+                voice_descriptions.append(f"`{voice}` ({description})")
+
+            embed.add_field(
+                name=category,
+                value="\n".join(voice_descriptions),
+                inline=False
             )
 
-            premade_voices = sorted([v.name for v in self._voices_cache if v.category == 'premade'])
-            cloned_voices = sorted([v.name for v in self._voices_cache if v.category != 'premade'])
+        embed.set_footer(text=f"총 {len(AVAILABLE_VOICES)}개의 목소리 사용 가능")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-            if premade_voices:
-                embed.add_field(name="기본 제공 목소리", value=", ".join(premade_voices), inline=False)
+    @app_commands.command(name="test_voices", description="선택한 목소리들을 테스트해볼 수 있습니다.")
+    @app_commands.autocomplete(voice=voice_autocomplete)
+    @app_commands.describe(
+        voice="테스트할 목소리 이름",
+        test_text="테스트할 텍스트 (선택사항)"
+    )
+    async def test_voices(self, interaction: discord.Interaction, voice: str, test_text: str = "안녕하세요! 이것은 음성 테스트입니다."):
+        """특정 목소리를 테스트합니다."""
+        if client is None:
+            await interaction.response.send_message("오류: Google Gemini 클라이언트가 초기화되지 않았습니다.", ephemeral=True)
+            return
 
-            if cloned_voices:
-                embed.add_field(name="사용자 정의 목소리", value=", ".join(cloned_voices), inline=False)
+        voice_client = interaction.guild.voice_client
+        if not voice_client:
+            await interaction.response.send_message("봇이 음성 채널에 없습니다. 먼저 `/join` 명령어를 사용해주세요.", ephemeral=True)
+            return
 
-            await interaction.followup.send(embed=embed, ephemeral=True)
+        if voice not in AVAILABLE_VOICES:
+            await interaction.response.send_message(f"`{voice}`는 사용할 수 없는 목소리입니다.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+
+        try:
+            # TTS 생성을 비동기로 처리
+            response = await self._generate_tts_async(test_text, voice)
+
+            audio_data = response.candidates[0].content.parts[0].inline_data.data
+
+            # WAV 파일 생성을 비동기로 처리
+            loop = asyncio.get_event_loop()
+            audio_source = await loop.run_in_executor(None, self._create_wave_file, audio_data)
+
+            voice_client.play(
+                discord.FFmpegPCMAudio(source=audio_source, pipe=True),
+                after=lambda e: logging.error(f'테스트 재생 오류: {e}') if e else logging.info('테스트 재생 완료')
+            )
+
+            await interaction.followup.send(f"🔊 **{voice}** ({AVAILABLE_VOICES[voice]}) 테스트: {test_text}")
 
         except Exception as e:
-            print(f"목소리 목록을 가져오는 중 오류 발생: {e}")
-            self._voices_cache = None  # 오류 발생 시 캐시 초기화
-            await interaction.followup.send("목소리 목록을 가져오는 데 실패했습니다. API 키를 확인해주세요.", ephemeral=True)
+            logging.error(f"음성 테스트 오류: {e}")
+            await interaction.followup.send("음성 테스트 중 오류가 발생했습니다.", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
+    """이 cog를 봇에 추가하기 위한 진입점 함수입니다."""
     if client is None:
-        print("ElevenLabs 클라이언트가 초기화되지 않아 TTSCog를 로드하지 않습니다.")
+        print("Google Gemini 클라이언트가 초기화되지 않아 TTSCog를 로드하지 않습니다.")
         return
     await bot.add_cog(TTSCog(bot))
