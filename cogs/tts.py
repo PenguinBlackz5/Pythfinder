@@ -168,7 +168,7 @@ class TTSCog(commands.Cog):
                   emotion: str = '',
                   custom_emotion: str = None,
                   voice: str = "Kore"):
-        """입력된 텍스트를 음성으로 변환하여 채널에서 재생합니다."""
+        """입력된 텍스트를 음성으로 변환하여 채널에서 재생하고 파일을 업로드합니다."""
         if client is None:
             await interaction.response.send_message("오류: Google Gemini 클라이언트가 초기화되지 않았습니다. 봇 관리자는 API 키 설정을 확인해주세요.",
                                                     ephemeral=True)
@@ -197,14 +197,11 @@ class TTSCog(commands.Cog):
             final_text = text
             display_emotion_name = None
 
-            # 커스텀 감정이 입력되면 최우선으로 적용
             if custom_emotion:
                 final_text = f"Say {custom_emotion}: {text}"
                 display_emotion_name = custom_emotion
-            # 커스텀 감정이 없고, 드롭다운에서 기본값이 아닌 감정을 선택했을 때 적용
             elif emotion and emotion != '':
                 final_text = f"Say {emotion}: {text}"
-                # 감정 선택지에서 name 값 찾기
                 emotion_param = discord.utils.get(self.say.parameters, name='emotion')
                 if emotion_param:
                     choice = discord.utils.get(emotion_param.choices, value=emotion)
@@ -213,8 +210,6 @@ class TTSCog(commands.Cog):
 
             # TTS 생성을 비동기로 처리
             response = await self._generate_tts_async(final_text, voice)
-
-            # 오디오 데이터 추출
             audio_data = response.candidates[0].content.parts[0].inline_data.data
 
             if not audio_data:
@@ -225,18 +220,20 @@ class TTSCog(commands.Cog):
             loop = asyncio.get_event_loop()
             audio_source = await loop.run_in_executor(None, self._create_wave_file, audio_data)
 
-            # Discord에서 재생
+            discord_file = discord.File(audio_source, filename=f"say_{voice}.wav")
+
+            audio_source.seek(0)
+
             voice_client.play(
                 discord.FFmpegPCMAudio(source=audio_source, pipe=True),
                 after=lambda e: logging.error(f'재생 오류: {e}') if e else logging.info('재생 완료')
             )
 
-            # 응답 메시지 생성
             response_message = f"🔊 **{voice}** ({AVAILABLE_VOICES[voice]}): {text}"
             if display_emotion_name:
                 response_message = f"😊 **{display_emotion_name}** | " + response_message
 
-            await interaction.followup.send(response_message)
+            await interaction.followup.send(response_message, file=discord_file)
 
         except Exception as e:
             print(f"Google Gemini TTS 기능에서 오류 발생: {e}")
@@ -295,51 +292,6 @@ class TTSCog(commands.Cog):
 
         embed.set_footer(text=f"총 {len(AVAILABLE_VOICES)}개의 목소리 사용 가능")
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="test_voices", description="선택한 목소리들을 테스트해볼 수 있습니다.")
-    @app_commands.autocomplete(voice=voice_autocomplete)
-    @app_commands.describe(
-        voice="테스트할 목소리 이름",
-        test_text="테스트할 텍스트 (선택사항)"
-    )
-    async def test_voices(self, interaction: discord.Interaction, voice: str, test_text: str = "안녕하세요! 이것은 음성 테스트입니다."):
-        """특정 목소리를 테스트합니다."""
-        if client is None:
-            await interaction.response.send_message("오류: Google Gemini 클라이언트가 초기화되지 않았습니다.", ephemeral=True)
-            return
-
-        voice_client = interaction.guild.voice_client
-        if not voice_client:
-            await interaction.response.send_message("봇이 음성 채널에 없습니다. 먼저 `/join` 명령어를 사용해주세요.", ephemeral=True)
-            return
-
-        if voice not in AVAILABLE_VOICES:
-            await interaction.response.send_message(f"`{voice}`는 사용할 수 없는 목소리입니다.", ephemeral=True)
-            return
-
-        await interaction.response.defer()
-
-        try:
-            # TTS 생성을 비동기로 처리
-            response = await self._generate_tts_async(test_text, voice)
-
-            audio_data = response.candidates[0].content.parts[0].inline_data.data
-
-            # WAV 파일 생성을 비동기로 처리
-            loop = asyncio.get_event_loop()
-            audio_source = await loop.run_in_executor(None, self._create_wave_file, audio_data)
-
-            voice_client.play(
-                discord.FFmpegPCMAudio(source=audio_source, pipe=True),
-                after=lambda e: logging.error(f'테스트 재생 오류: {e}') if e else logging.info('테스트 재생 완료')
-            )
-
-            await interaction.followup.send(f"🔊 **{voice}** ({AVAILABLE_VOICES[voice]}) 테스트: {test_text}")
-
-        except Exception as e:
-            logging.error(f"음성 테스트 오류: {e}")
-            await interaction.followup.send("음성 테스트 중 오류가 발생했습니다.", ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     """이 cog를 봇에 추가하기 위한 진입점 함수입니다."""
