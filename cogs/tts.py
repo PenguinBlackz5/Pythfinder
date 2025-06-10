@@ -293,6 +293,7 @@ class TTSCog(commands.Cog):
         embed.set_footer(text=f"총 {len(AVAILABLE_VOICES)}개의 목소리 사용 가능")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
 async def setup(bot: commands.Bot):
     """이 cog를 봇에 추가하기 위한 진입점 함수입니다."""
     if client is None:
