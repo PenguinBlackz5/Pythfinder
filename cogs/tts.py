@@ -10,10 +10,8 @@ import wave
 import asyncio
 import logging
 
-# .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
 
-# Google Gemini 클라이언트 초기화
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     print("경고: GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. TTS 기능이 작동하지 않을 수 있습니다.")
@@ -187,13 +185,10 @@ class TTSCog(commands.Cog):
         await interaction.response.defer()
 
         try:
-            # 음성 이름 검증
             if voice not in AVAILABLE_VOICES:
-                await interaction.followup.send(f"`{voice}`는 사용할 수 없는 목소리입니다. `/voices` 명령어로 사용 가능한 목소리를 확인해주세요.",
-                                                ephemeral=True)
+                await interaction.followup.send(f"`{voice}`는 사용할 수 없는 목소리입니다.", ephemeral=True)
                 return
 
-            # 감정 적용된 최종 텍스트 생성
             final_text = text
             display_emotion_name = None
 
@@ -208,32 +203,32 @@ class TTSCog(commands.Cog):
                     if choice:
                         display_emotion_name = choice.name
 
-            # TTS 생성을 비동기로 처리
             response = await self._generate_tts_async(final_text, voice)
             audio_data = response.candidates[0].content.parts[0].inline_data.data
 
             if not audio_data:
-                await interaction.followup.send("음성 데이터를 생성하는 데 실패했습니다. API 키 또는 입력 내용을 확인해주세요.", ephemeral=True)
+                await interaction.followup.send("음성 데이터를 생성하는 데 실패했습니다.", ephemeral=True)
                 return
 
-            # PCM 데이터를 WAV 파일로 변환 (비동기 처리)
-            loop = asyncio.get_event_loop()
-            audio_source = await loop.run_in_executor(None, self._create_wave_file, audio_data)
+            audio_stream = self._create_wave_file(audio_data)
 
-            discord_file = discord.File(audio_source, filename=f"say_{voice}.wav")
+            wav_bytes = audio_stream.getvalue()
+            audio_stream.close()
 
-            audio_source.seek(0)
-
-            voice_client.play(
-                discord.FFmpegPCMAudio(source=audio_source, pipe=True),
-                after=lambda e: logging.error(f'재생 오류: {e}') if e else logging.info('재생 완료')
-            )
+            upload_stream = io.BytesIO(wav_bytes)
+            play_stream = io.BytesIO(wav_bytes)
 
             response_message = f"🔊 **{voice}** ({AVAILABLE_VOICES[voice]}): {text}"
             if display_emotion_name:
                 response_message = f"😊 **{display_emotion_name}** | " + response_message
 
+            discord_file = discord.File(upload_stream, filename=f"say_{voice}.wav")
             await interaction.followup.send(response_message, file=discord_file)
+
+            voice_client.play(
+                discord.FFmpegPCMAudio(source=play_stream, pipe=True),
+                after=lambda e: logging.error(f'재생 오류: {e}') if e else logging.info('재생 완료')
+            )
 
         except Exception as e:
             print(f"Google Gemini TTS 기능에서 오류 발생: {e}")
