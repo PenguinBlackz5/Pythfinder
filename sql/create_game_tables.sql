@@ -53,4 +53,16 @@ INSERT INTO game_monsters (name, hp, attack, defense, reward_exp, reward_gold) V
 ('슬라임', 20, 5, 2, 10, 5),
 ('고블린', 35, 8, 4, 15, 10),
 ('오크', 50, 12, 6, 25, 20)
-ON CONFLICT (name) DO NOTHING; 
+ON CONFLICT (name) DO NOTHING;
+
+-- 데이터 버전 관리 테이블
+CREATE TABLE IF NOT EXISTS game_data_versions (
+    data_type VARCHAR(50) PRIMARY KEY,
+    version INT NOT NULL DEFAULT 0
+);
+
+-- 초기 데이터 버전 설정
+INSERT INTO game_data_versions (data_type, version) VALUES
+('items', 1),
+('monsters', 1)
+ON CONFLICT (data_type) DO NOTHING; 

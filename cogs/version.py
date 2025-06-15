@@ -41,14 +41,14 @@ class Version(commands.Cog):
 
             self.local_commit_hash = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"],
-                universal_newlines=True,
+                text=True,
                 encoding="utf-8"
             ).strip()[:7]  # 7자리만 사용
 
             # 현재 커밋 날짜 가져오기
             date_str = subprocess.check_output(
                 ["git", "show", "-s", "--format=%ci", "HEAD"],
-                universal_newlines=True,
+                text=True,
                 encoding="utf-8"
             ).strip()
             self.local_commit_date = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
@@ -56,26 +56,30 @@ class Version(commands.Cog):
             # 현재 커밋 메시지 가져오기
             self.local_commit_message = subprocess.check_output(
                 ["git", "show", "-s", "--format=%s", "HEAD"],
-                universal_newlines=True,
+                text=True,
                 encoding="utf-8"
             ).strip()
 
             # 현재 커밋 작성자 가져오기
             self.local_commit_author = subprocess.check_output(
                 ["git", "show", "-s", "--format=%an", "HEAD"],
-                universal_newlines=True,
+                text=True,
                 encoding="utf-8"
-            )
+            ).strip()
 
             print(f"✅ 로컬 버전 정보 로드 완료: {self.local_commit_hash}")
+        except FileNotFoundError:
+            print("Git이 설치되어 있지 않거나 경로가 잘못되었습니다. 로컬 버전 정보를 로드할 수 없습니다.")
+            self.local_commit_hash = "정보 없음"
+            self.local_commit_date = None
+            self.local_commit_message = "Git 정보를 찾을 수 없습니다."
+            self.local_commit_author = "정보 없음"
         except Exception as e:
             print(f"로컬 버전 정보 로드 실패: {e}")
             self.local_commit_hash = "봇 실행 시간"
             self.local_commit_date = None
             self.local_commit_message = "재실행 될 때까지 기다려주세요!"
             self.local_commit_author = "봇이 마지막으로 실행된 시간입니다."
-        except FileNotFoundError as e:
-            print(e)
 
     PUBLIC_OR_NOT_CHOICES = [
         app_commands.Choice(name="True", value="True"),
@@ -119,55 +123,83 @@ class Version(commands.Cog):
                     remote_date_str = latest_commit['commit']['author']['date']
                     remote_commit_date = datetime.datetime.strptime(remote_date_str, "%Y-%m-%dT%H:%M:%SZ")
 
-                    # 한국 시간
+                    # 한국 시간대 객체 생성
                     kst_timezone = pytz.timezone('Asia/Seoul')
+                    
+                    # UTC 시간을 KST로 변환
                     remote_commit_date_kst = remote_commit_date.replace(tzinfo=timezone.utc).astimezone(kst_timezone)
 
-                    # KST로 포맷팅
-                    remote_formatted_date = remote_commit_date_kst.strftime("%Y년 %m월 %d일 %H:%M")
+                    # 모든 날짜/시간 형식을 통일
+                    common_format = "%Y년 %m월 %d일 %H:%M:%S"
+                    remote_formatted_date = remote_commit_date_kst.strftime(common_format)
 
-                    # 로컬 커밋 날짜 포맷팅
-                    if self.local_commit_date is not None:
-                        local_formatted_date = self.local_commit_date.strftime("%Y년 %m월 %d일 %H:%M")
+                    # 로컬 커밋 날짜 포맷팅 (존재하는 경우)
+                    if self.local_commit_date:
+                        local_formatted_date = self.local_commit_date.astimezone(kst_timezone).strftime(common_format)
                     else:
-                        local_formatted_date = f"{self.deploy_time}"
+                        # Git 정보를 못 가져왔을 때의 대체 시간 포맷팅
+                        try:
+                            # 'YYYY-MM-DD HH:MM:SS' 형식의 deploy_time을 datetime 객체로 파싱
+                            deploy_dt = datetime.datetime.strptime(self.deploy_time, '%Y-%m-%d %H:%M:%S')
+                            local_formatted_date = deploy_dt.strftime(common_format)
+                        except ValueError:
+                            local_formatted_date = self.deploy_time # 파싱 실패 시 원본 표시
 
-                    # 버전 비교
-                    if self.local_commit_hash is not None:
+                    # 버전 비교 로직 개선
+                    is_local_version_available = self.local_commit_hash not in ["정보 없음", "봇 실행 시간"]
+
+                    if is_local_version_available:
                         is_latest = self.local_commit_hash == remote_commit_hash
                         status_emoji = "✅" if is_latest else "⚠️"
                         status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
+                        color = 0x00ff00 if is_latest else 0xffcc00
                     else:
                         is_latest = False
-                        self.local_commit_hash = "unknown"
-                        status_emoji = "✅"
-                        status_text = "최신 버전의 정보를 표시합니다."
+                        status_emoji = "❓"
+                        status_text = "로컬 버전을 확인할 수 없어, 업데이트 필요 여부를 판단할 수 없습니다."
+                        color = 0x95a5a6  # 회색
 
                     # 임베드 생성
                     embed = discord.Embed(
                         title=f"{status_emoji} 봇 버전 정보",
                         description=f"**상태**: {status_text}\n**저장소**: [PenguinBlackz5/Pythfinder](https://github.com/PenguinBlackz5/Pythfinder)",
-                        color=0x00ff00 if is_latest else 0xffcc00
+                        color=color
                     )
 
-                    # 현재 버전 필드
-                    if self.local_commit_hash:
-                        embed.add_field(
-                            name="📌 현재 실행 중인 버전",
-                            value=f"```#️⃣: {self.local_commit_hash}\n📅: {local_formatted_date}\n🗣️:"
-                                  f" {self.local_commit_author} / {self.local_commit_message}```",
-                            inline=False
-                        )
+                    # 현재 버전 필드 (항상 표시)
+                    embed.add_field(
+                        name="📌 현재 실행 중인 버전",
+                        value=f"```#️⃣: {self.local_commit_hash}\n"
+                              f"📅: {local_formatted_date}\n"
+                              f"🗣️: {self.local_commit_author} / {self.local_commit_message}```",
+                        inline=False
+                    )
 
                     # 최신 버전 필드
                     embed.add_field(
                         name="🔄 GitHub 최신 버전",
-                        value=f"```#️⃣: {remote_commit_hash}\n📅: {remote_formatted_date}\n🗣️: {remote_commit_author} / {remote_commit_message}```\n[GitHub에서 보기]({remote_commit_url})",
+                        value=f"```#️⃣: {remote_commit_hash}\n"
+                              f"📅: {remote_formatted_date}\n"
+                              f"🗣️: {remote_commit_author} / {remote_commit_message}```\n"
+                              f"[GitHub에서 보기]({remote_commit_url})",
                         inline=False
                     )
 
+                    # 게임 데이터 버전 정보 추가
+                    text_rpg_cog = self.bot.get_cog("TextRPG")
+                    if text_rpg_cog and hasattr(text_rpg_cog, 'data_versions') and text_rpg_cog.data_versions:
+                        data_version_info = []
+                        for data_type, version in text_rpg_cog.data_versions.items():
+                            data_version_info.append(f"- {data_type.capitalize()}: v{version}")
+                        
+                        embed.add_field(
+                            name="🎮 게임 데이터 버전",
+                            value="```" + "\n".join(data_version_info) + "```",
+                            inline=False
+                        )
+
                     embed.set_footer(
-                        text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime('%Y-%m-%d %H:%M:%S')}"
+                        text=f"봇 버전 확인 시간: {datetime.datetime.now(kst_timezone).strftime(common_format)}"
                     )
 
                     await interaction.followup.send(embed=embed)
