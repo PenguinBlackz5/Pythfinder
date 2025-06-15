@@ -4,6 +4,8 @@ from discord import app_commands
 from typing import List, Optional
 from database_manager import execute_query
 from main import is_admin_or_developer, DEVELOPER_IDS
+import io
+import os
 
 
 async def fetch_all_data(table_name: str) -> str:
@@ -57,6 +59,43 @@ async def get_table_list() -> List[str]:
 class Database(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+        @bot.tree.command(name="db실행", description="SQL 파일을 실행하여 데이터베이스를 설정합니다. (개발자 전용)")
+        @app_commands.describe(filename="실행할 SQL 파일 이름을 입력하세요 (예: create_game_tables.sql)")
+        async def execute_sql_file(interaction: discord.Interaction, filename: str):
+            if interaction.user.id not in DEVELOPER_IDS:
+                await interaction.response.send_message("❌ 이 명령어는 개발자만 사용할 수 있습니다!", ephemeral=True)
+                return
+
+            sql_file_path = os.path.join('sql', filename)
+
+            if not os.path.exists(sql_file_path):
+                await interaction.response.send_message(f"❌ '{sql_file_path}' 파일을 찾을 수 없습니다.", ephemeral=True)
+                return
+
+            try:
+                with open(sql_file_path, 'r', encoding='utf-8') as f:
+                    sql_script = f.read()
+
+                # 여러 SQL 문이 있을 수 있으므로 세미콜론으로 분리하여 각각 실행
+                # (주석을 제거하고 비어있지 않은 문장만 실행)
+                commands = [
+                    cmd.strip() for cmd in sql_script.split(';')
+                    if cmd.strip() and not cmd.strip().startswith('--')
+                ]
+
+                for command in commands:
+                    await execute_query(command)
+
+                await interaction.response.send_message(
+                    f"✅ '{filename}' 파일의 SQL 스크립트를 성공적으로 실행했습니다.",
+                    ephemeral=True
+                )
+            except Exception as e:
+                await interaction.response.send_message(
+                    f"❌ SQL 스크립트 실행 중 오류가 발생했습니다.\n`{e}`",
+                    ephemeral=True
+                )
 
         @bot.tree.command(
             name="디비테스트",
