@@ -680,7 +680,6 @@ else:
     print("SENTRY_DSN 환경 변수가 설정되지 않았습니다!")
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 봇 실행 부분 수정
 if __name__ == "__main__":
