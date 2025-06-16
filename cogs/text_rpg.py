@@ -143,8 +143,8 @@ class TextRPG(commands.Cog):
                 await interaction.response.send_message("⚠️ 이미 살아있는 모험가가 있습니다. 여정을 끝마친 후에 새로운 모험을 시작할 수 있습니다.", ephemeral=True)
                 return
 
-            races = await execute_query("SELECT race_id, name, description FROM game_races ORDER BY name")
-            classes = await execute_query("SELECT class_id, name, description, starting_items FROM game_classes ORDER BY name")
+            races = await execute_query("SELECT * FROM game_races ORDER BY name")
+            classes = await execute_query("SELECT * FROM game_classes ORDER BY name")
 
             if not races or not classes:
                 await interaction.response.send_message("❌ 게임 기본 데이터를 불러올 수 없습니다. 관리자에게 문의하세요.", ephemeral=True)
