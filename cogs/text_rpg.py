@@ -1,157 +1,222 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import os
 import logging
 from database_manager import execute_query
+import json
 
-# 데이터 버전 정의
-# 나중에 아이템, 몬스터 데이터가 추가될 때마다 이 버전을 올리고,
-# sql/updates/ 폴더에 해당 버전의 sql 파일을 추가해야 합니다.
-LATEST_ITEM_VERSION = 1
-LATEST_MONSTER_VERSION = 1
+# 데이터 버전 상수는 cogs/database.py에서 중앙 관리하므로 여기서는 제거합니다.
+
+# ==== 캐릭터 생성 UI ====
+
+class CharacterCreationView(discord.ui.View):
+    """캐릭터 생성을 위한 동적 View"""
+    def __init__(self, author_id: int, races: list, classes: list):
+        super().__init__(timeout=300)
+        self.author_id = author_id
+        self.races = {str(r['race_id']): r for r in races}
+        self.classes = {str(c['class_id']): c for c in classes}
+        
+        self.selected_race_id = None
+        self.selected_class_id = None
+
+        # 초기에는 종족 선택만 추가
+        self.add_item(self.create_race_select())
+
+    def create_race_select(self):
+        """종족 선택 드롭다운 메뉴를 생성합니다."""
+        options = [
+            discord.SelectOption(label=r['name'], value=str(r['race_id']), description=r['description'][:100])
+            for r in self.races.values()
+        ]
+        select = discord.ui.Select(placeholder="1. 종족을 선택하세요...", options=options, custom_id="race_select")
+        select.callback = self.on_race_select
+        return select
+
+    def create_class_select(self):
+        """직업 선택 드롭다운 메뉴를 생성합니다."""
+        options = [
+            discord.SelectOption(label=c['name'], value=str(c['class_id']), description=c['description'][:100])
+            for c in self.classes.values()
+        ]
+        select = discord.ui.Select(placeholder="2. 직업을 선택하세요...", options=options, custom_id="class_select")
+        select.callback = self.on_class_select
+        return select
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("명령어를 실행한 본인만 선택할 수 있습니다.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            await self.message.edit(content="캐릭터 생성 시간이 초과되었습니다.", view=self)
+
+    @discord.ui.button(label="캐릭터 생성", style=discord.ButtonStyle.success, row=2, disabled=True)
+    async def create_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            race = self.races[self.selected_race_id]
+            d_class = self.classes[self.selected_class_id]
+
+            name = interaction.user.display_name
+            user_id = interaction.user.id
+            hp = race['base_hp']
+            mp = race['base_mp']
+            attack = race['base_attack']
+            defense = race['base_defense']
+            next_exp = 100 
+
+            new_char = await execute_query(
+                """
+                INSERT INTO game_characters 
+                (user_id, name, race_id, class_id, hp, max_hp, mp, max_mp, attack, defense, next_exp)
+                VALUES ($1, $2, $3, $4, $5, $5, $6, $6, $7, $8, $9)
+                RETURNING character_id
+                """,
+                (user_id, name, int(self.selected_race_id), int(self.selected_class_id), hp, mp, attack, defense, next_exp)
+            )
+            character_id = new_char[0]['character_id']
+            
+            if d_class['starting_items']:
+                starting_items_str = d_class['starting_items']
+                starting_items = json.loads(starting_items_str) if isinstance(starting_items_str, str) else starting_items_str
+                
+                for item_info in starting_items:
+                    item_record = await execute_query("SELECT item_id FROM game_items WHERE name = $1", (item_info['item_name'],))
+                    if item_record:
+                        item_id = item_record[0]['item_id']
+                        await execute_query(
+                            "INSERT INTO game_inventory (character_id, item_id, quantity) VALUES ($1, $2, $3)",
+                            (character_id, item_id, item_info['quantity'])
+                        )
+
+            embed = discord.Embed(title="⚔️ 모험의 시작", description=f"{interaction.user.mention}, 당신의 새로운 이야기가 시작됩니다.", color=discord.Color.green())
+            embed.add_field(name="이름", value=name)
+            embed.add_field(name="종족", value=race['name'])
+            embed.add_field(name="직업", value=d_class['name'])
+            
+            await interaction.followup.send(embed=embed)
+            
+            for item in self.children:
+                item.disabled = True
+            await interaction.edit_original_response(content="캐릭터 생성이 완료되었습니다.", view=self)
+            self.stop()
+
+        except Exception as e:
+            logging.error(f"캐릭터 생성 중 오류: {e}", exc_info=True)
+            await interaction.followup.send("캐릭터 생성 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+
+    async def on_race_select(self, interaction: discord.Interaction):
+        select = interaction.data['values'][0]
+        self.selected_race_id = select
+        
+        # 직업 선택 메뉴가 없다면 추가
+        if not any(c.custom_id == "class_select" for c in self.children):
+            self.add_item(self.create_class_select())
+        
+        await interaction.response.edit_message(view=self)
+
+    async def on_class_select(self, interaction: discord.Interaction):
+        select = interaction.data['values'][0]
+        self.selected_class_id = select
+        
+        create_btn = next((c for c in self.children if isinstance(c, discord.ui.Button)), None)
+        if create_btn:
+            create_btn.disabled = False
+        
+        await interaction.response.edit_message(view=self)
 
 class TextRPG(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_versions = {}
-        bot.loop.create_task(self.initialize_game_data())
 
-    async def initialize_game_data(self):
-        """봇 시작 시 게임 데이터 버전을 확인하고, 필요시 업데이트를 수행합니다."""
-        await self.bot.wait_until_ready()
-        logging.info("TextRPG: 데이터 버전 확인 및 업데이트 시작...")
-
-        try:
-            # 코드에 정의된 최신 버전
-            code_versions = {
-                "items": LATEST_ITEM_VERSION,
-                "monsters": LATEST_MONSTER_VERSION,
-            }
-
-            for data_type, latest_version in code_versions.items():
-                # DB에 저장된 현재 버전 가져오기
-                result = await execute_query(
-                    "SELECT version FROM game_data_versions WHERE data_type = $1",
-                    (data_type,)
-                )
-                db_version = result[0]['version'] if result else 0
-
-                logging.info(f"'{data_type}' 데이터 버전: DB = v{db_version}, Code = v{latest_version}")
-
-                # 버전 비교 및 업데이트
-                if db_version < latest_version:
-                    logging.info(f"'{data_type}' 데이터 업데이트 필요. (v{db_version} -> v{latest_version})")
-                    await self.run_updates(data_type, db_version, latest_version)
-                
-                # 메모리에 현재 버전 저장
-                self.data_versions[data_type] = latest_version
-
-            logging.info("TextRPG: 데이터 버전 확인 및 업데이트 완료.")
-
-        except Exception as e:
-            logging.error(f"게임 데이터 초기화 중 심각한 오류 발생: {e}", exc_info=True)
-
-    async def run_updates(self, data_type: str, current_version: int, target_version: int):
-        """특정 데이터 타입의 업데이트 스크립트를 순차적으로 실행합니다."""
-        for version in range(current_version + 1, target_version + 1):
-            update_file = f"sql/updates/{data_type}_v{version}.sql"
-            logging.info(f"'{update_file}' 실행 시도...")
-            
-            if not os.path.exists(update_file):
-                logging.warning(f"업데이트 파일 '{update_file}'을(를) 찾을 수 없어 건너뜁니다.")
-                continue
-
-            try:
-                with open(update_file, 'r', encoding='utf-8') as f:
-                    # 주석을 제외하고 세미콜론으로 구분된 모든 명령 실행
-                    commands = [cmd.strip() for cmd in f.read().split(';') if cmd.strip() and not cmd.strip().startswith('--')]
-                    for command in commands:
-                        await execute_query(command)
-                
-                # 버전 정보 업데이트
-                await execute_query(
-                    """
-                    INSERT INTO game_data_versions (data_type, version) VALUES ($1, $2)
-                    ON CONFLICT (data_type) DO UPDATE SET version = $2
-                    """,
-                    (data_type, version)
-                )
-                logging.info(f"✅ '{update_file}' 성공적으로 실행. '{data_type}'이(가) v{version}(으)로 업데이트되었습니다.")
-
-            except Exception as e:
-                logging.error(f"'{update_file}' 실행 중 오류 발생: {e}", exc_info=True)
-                # 업데이트 실패 시, 더 이상 진행하지 않고 중단
-                raise
-
-    @app_commands.command(name="게임시작", description="텍스트 RPG 게임을 시작하고 캐릭터를 생성합니다.")
-    async def start_game(self, interaction: discord.Interaction):
+    @app_commands.command(name="탐험시작", description="새로운 모험을 시작하고, 당신의 분신을 만듭니다.")
+    async def explore_start(self, interaction: discord.Interaction):
         user_id = interaction.user.id
-        
         try:
-            # 사용자가 이미 캐릭터를 가지고 있는지 확인
-            existing_character = await execute_query(
-                "SELECT user_id FROM game_characters WHERE user_id = $1",
-                (user_id,)
-            )
-
+            existing_character = await execute_query("SELECT 1 FROM game_characters WHERE user_id = $1", (user_id,))
             if existing_character:
-                await interaction.response.send_message("이미 당신의 모험은 시작되었습니다. `/내정보`를 확인해보세요!", ephemeral=True)
+                await interaction.response.send_message("⚠️ 이미 살아있는 모험가가 있습니다. 여정을 끝마친 후에 새로운 모험을 시작할 수 있습니다.", ephemeral=True)
                 return
 
-            # 새 캐릭터 생성
-            await execute_query(
-                """
-                INSERT INTO game_characters (user_id, level, hp, max_hp, attack, defense, exp, next_exp)
-                VALUES ($1, 1, 100, 100, 10, 5, 0, 100)
-                """,
-                (user_id,)
-            )
-            
-            logging.info(f"{interaction.user.name}({user_id}) 님이 게임을 시작했습니다.")
-            await interaction.response.send_message(f"🎉 환영합니다, {interaction.user.mention}님! 당신의 모험이 지금 막 시작되었습니다. `/내정보`로 능력치를 확인해보세요.", ephemeral=True)
+            races = await execute_query("SELECT race_id, name, description FROM game_races ORDER BY name")
+            classes = await execute_query("SELECT class_id, name, description, starting_items FROM game_classes ORDER BY name")
+
+            if not races or not classes:
+                await interaction.response.send_message("❌ 게임 기본 데이터를 불러올 수 없습니다. 관리자에게 문의하세요.", ephemeral=True)
+                return
+
+            view = CharacterCreationView(interaction.user.id, races, classes)
+            await interaction.response.send_message("새로운 모험을 시작합니다. 당신의 정체성을 선택해주세요.", view=view, ephemeral=True)
+            view.message = await interaction.original_response()
 
         except Exception as e:
-            logging.error(f"/게임시작 명령어 처리 중 오류 발생: {e}", exc_info=True)
-            await interaction.response.send_message("❌ 캐릭터를 만드는 동안 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+            logging.error(f"/탐험시작 명령어 처리 중 오류 발생: {e}", exc_info=True)
+            await interaction.response.send_message("❌ 모험을 시작하는 중 오류가 발생했습니다.", ephemeral=True)
 
-    @app_commands.command(name="내정보", description="당신의 캐릭터 상태를 확인합니다.")
+    @app_commands.command(name="내정보", description="현재 캐릭터의 상태를 확인합니다.")
     async def character_info(self, interaction: discord.Interaction):
         user_id = interaction.user.id
-
         try:
-            # 데이터베이스에서 캐릭터 정보 불러오기
-            character_data = await execute_query(
-                "SELECT * FROM game_characters WHERE user_id = $1",
-                (user_id,)
-            )
+            # 캐릭터 기본 정보, 종족, 직업 정보 가져오기
+            char_data = await execute_query("""
+                SELECT c.*, r.name as race_name, cl.name as class_name
+                FROM game_characters c
+                JOIN game_races r ON c.race_id = r.race_id
+                JOIN game_classes cl ON c.class_id = cl.class_id
+                WHERE c.user_id = $1
+            """, (user_id,))
 
-            if not character_data:
-                await interaction.response.send_message("아직 모험을 시작하지 않으셨군요. `/게임시작`으로 당신의 이야기를 만들어보세요!", ephemeral=True)
+            if not char_data:
+                await interaction.response.send_message("생성된 캐릭터가 없습니다. `/탐험시작`으로 새로운 모험을 시작하세요.", ephemeral=True)
                 return
             
-            char = character_data[0]
+            char = char_data[0]
+            character_id = char['character_id']
 
+            # 인벤토리 정보 가져오기 (장착 장비 포함)
+            inventory_data = await execute_query("""
+                SELECT i.name, inv.quantity, inv.is_equipped
+                FROM game_inventory inv
+                JOIN game_items i ON inv.item_id = i.item_id
+                WHERE inv.character_id = $1
+                ORDER BY inv.is_equipped DESC, i.name
+            """, (character_id,))
+
+            # Embed 생성
             embed = discord.Embed(
-                title=f"{interaction.user.name}의 모험가 정보",
-                description="당신의 위대한 여정은 이제 시작일 뿐입니다.",
-                color=discord.Color.gold()
+                title=f"<{char['name']}>의 모험 정보",
+                description=f"_{char['race_name']} {char['class_name']}_",
+                color=discord.Color.blue()
             )
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
             
-            embed.add_field(name="`🏅` 레벨", value=f"{char['level']}", inline=True)
-            embed.add_field(name="`❤️` 체력", value=f"{char['hp']} / {char['max_hp']}", inline=True)
-            embed.add_field(name="`📈` 경험치", value=f"{char['exp']} / {char['next_exp']}", inline=True)
-            embed.add_field(name="`⚔️` 공격력", value=f"{char['attack']}", inline=True)
-            embed.add_field(name="`🛡️` 방어력", value=f"{char['defense']}", inline=True)
+            # 주요 스탯
+            embed.add_field(name="레벨", value=f"**Lv. {char['level']}** ({char['exp']}/{char['next_exp']} EXP)")
+            embed.add_field(name="체력 (HP)", value=f"❤️ {char['hp']}/{char['max_hp']}", inline=True)
+            embed.add_field(name="마나 (MP)", value=f"💙 {char['mp']}/{char['max_mp']}", inline=True)
+            
+            # 전투 능력치
+            embed.add_field(name="⚔️ 공격력", value=str(char['attack']), inline=True)
+            embed.add_field(name="🛡️ 방어력", value=str(char['defense']), inline=True)
+            embed.add_field(name="💰 골드", value="0 G", inline=True) # 골드 필드는 나중에 추가
+            
+            # 장비 및 인벤토리
+            equipped_items = [item['name'] for item in inventory_data if item['is_equipped']]
+            inventory_items = [f"{item['name']} ({item['quantity']})" for item in inventory_data if not item['is_equipped']]
 
-            embed.set_footer(text=f"ID: {char['user_id']}")
+            embed.add_field(name="장착 장비", value="\n".join(equipped_items) if equipped_items else "장착한 장비가 없습니다.", inline=False)
+            embed.add_field(name="가방", value="\n".join(inventory_items) if inventory_items else "가방이 비어있습니다.", inline=False)
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
         except Exception as e:
             logging.error(f"/내정보 명령어 처리 중 오류 발생: {e}", exc_info=True)
-            await interaction.response.send_message("❌ 정보를 불러오는 동안 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+            await interaction.response.send_message("❌ 정보를 불러오는 중 오류가 발생했습니다.", ephemeral=True)
 
 
 async def setup(bot):
