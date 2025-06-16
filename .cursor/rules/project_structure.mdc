@@ -1,0 +1,37 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Project Structure and Key Files Guide
+
+This document outlines the architecture and key files for the "Dungeons & Discord" text RPG project.
+
+## 1. Documentation (`docs/`)
+
+All project planning, design specifications, and guides are located in the `docs/` directory.
+- **Game Design**: The core game mechanics, systems (like Covenants), and UI/UX design are detailed in [docs/game_design_detail.md](mdc:docs/game_design_detail.md). This is the primary source of truth for game features.
+- **Development Plan**: The high-level development roadmap, phased approach, and feature list are in [docs/game_plan.md](mdc:docs/game_plan.md).
+- **Developer Guide**: Technical guidelines, architectural principles (like the Conductor/Engine/Archivist model), and coding conventions are in [docs/developer_guide.md](mdc:docs/developer_guide.md).
+
+## 2. Core Application Logic
+
+- **Main Entry Point**: The bot application is launched from [main.py](mdc:main.py). It's responsible for loading cogs and initializing essential services like the database manager.
+
+- **Database Manager**: All database interactions are centralized through [database_manager.py](mdc:database_manager.py). No other part of the code should directly access the database.
+
+- **SQL Scripts (`sql/`)**: All SQL files are stored here.
+    - The main table creation schema is in [sql/create_game_tables.sql](mdc:sql/create_game_tables.sql).
+    - Data version update scripts are located in the `sql/updates/` subdirectory.
+
+## 3. Game Architecture (`cogs/` and `game/`)
+
+The game follows a Conductor/Engine architecture to separate concerns.
+
+- **The Conductor (`cogs/text_rpg.py`)**: This cog, located at [cogs/text_rpg.py](mdc:cogs/text_rpg.py), is the bridge between the user and the game engine. It handles all Discord commands (like `/탐험시작`) and UI interactions (button clicks), then calls the appropriate game logic. It **should not** contain any core game state logic itself.
+
+- **The Engine Room (`game/`)**: This directory contains all the core, backend game logic, completely independent of Discord.
+    - **Game Manager (`game/game_manager.py`)**: [game/game_manager.py](mdc:game/game_manager.py) is the central brain of the game. It manages the game state, player actions (`move_player`), and core mechanics like Field of View (`update_fov`).
+    - **Renderer (`game/renderer.py`)**: [game/renderer.py](mdc:game/renderer.py) is responsible for taking the current game state from the `GameManager` and turning it into a visual representation (the emoji-based viewport string).
+    - **Data Models (`game/models.py`)**: [game/models.py](mdc:game/models.py) defines the fundamental data structures of the game, such as `Player`, `Dungeon`, and `Tile`. It also contains the logic for creating the game world (e.g., `create_test_dungeon`).
+

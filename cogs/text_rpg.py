@@ -249,10 +249,12 @@ class GameUIView(discord.ui.View):
         await self.handle_move(interaction, 1, 1)
 
 class TextRPG(commands.Cog):
+    dungeon = app_commands.Group(name="던전", description="텍스트 로그라이크 게임 관련 명령어")
+
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="탐험시작", description="새로운 모험을 시작하고, 당신의 분신을 만듭니다.")
+    @dungeon.command(name="시작", description="새로운 모험을 시작하고, 당신의 분신을 만듭니다.")
     async def explore_start(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         try:
@@ -273,10 +275,10 @@ class TextRPG(commands.Cog):
             view.message = await interaction.original_response()
 
         except Exception as e:
-            logging.error(f"/탐험시작 명령어 처리 중 오류 발생: {e}", exc_info=True)
+            logging.error(f"/던전 시작 명령어 처리 중 오류 발생: {e}", exc_info=True)
             await interaction.response.send_message("❌ 모험을 시작하는 중 오류가 발생했습니다.", ephemeral=True)
 
-    @app_commands.command(name="내정보", description="현재 캐릭터의 상태를 확인합니다.")
+    @dungeon.command(name="정보", description="현재 캐릭터의 상태를 확인합니다.")
     async def character_info(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         try:
@@ -290,53 +292,87 @@ class TextRPG(commands.Cog):
             """, (user_id,))
 
             if not char_data:
-                await interaction.response.send_message("생성된 캐릭터가 없습니다. `/탐험시작`으로 새로운 모험을 시작하세요.", ephemeral=True)
+                await interaction.response.send_message("생성된 캐릭터가 없습니다. `/던전 시작`으로 새로운 모험을 시작하세요.", ephemeral=True)
                 return
             
             char = char_data[0]
             character_id = char['character_id']
 
-            # 인벤토리 정보 가져오기 (장착 장비 포함)
+            # 인벤토리 정보 가져오기 (아이템 타입 포함)
             inventory_data = await execute_query("""
-                SELECT i.name, inv.quantity, inv.is_equipped
+                SELECT i.name, i.item_type, inv.quantity, inv.is_equipped
                 FROM game_inventory inv
                 JOIN game_items i ON inv.item_id = i.item_id
                 WHERE inv.character_id = $1
-                ORDER BY inv.is_equipped DESC, i.name
+                ORDER BY inv.is_equipped DESC, i.item_type, i.name
             """, (character_id,))
 
             # Embed 생성
             embed = discord.Embed(
                 title=f"<{char['name']}>의 모험 정보",
                 description=f"_{char['race_name']} {char['class_name']}_",
-                color=discord.Color.blue()
+                color=discord.Color.dark_gold()
             )
-            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
+            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
             
-            # 주요 스탯
-            embed.add_field(name="레벨", value=f"**Lv. {char['level']}** ({char['exp']}/{char['next_exp']} EXP)")
-            embed.add_field(name="체력 (HP)", value=f"❤️ {char['hp']}/{char['max_hp']}", inline=True)
-            embed.add_field(name="마나 (MP)", value=f"💙 {char['mp']}/{char['max_mp']}", inline=True)
-            
-            # 전투 능력치
-            embed.add_field(name="⚔️ 공격력", value=str(char['attack']), inline=True)
-            embed.add_field(name="🛡️ 방어력", value=str(char['defense']), inline=True)
-            embed.add_field(name="💰 골드", value="0 G", inline=True) # 골드 필드는 나중에 추가
-            
-            # 장비 및 인벤토리
-            equipped_items = [item['name'] for item in inventory_data if item['is_equipped']]
-            inventory_items = [f"{item['name']} ({item['quantity']})" for item in inventory_data if not item['is_equipped']]
+            # 1. 기본 정보 필드
+            embed.add_field(
+                name="🌟 기본 정보",
+                value=f"**레벨**: {char['level']}\n"
+                      f"**경험치**: {char['exp']}/{char['next_exp']}\n"
+                      f"**위치**: 지하 {char['dungeon_level']}층",
+                inline=True
+            )
 
-            embed.add_field(name="장착 장비", value="\n".join(equipped_items) if equipped_items else "장착한 장비가 없습니다.", inline=False)
-            embed.add_field(name="가방", value="\n".join(inventory_items) if inventory_items else "가방이 비어있습니다.", inline=False)
+            # 2. 능력치 필드
+            embed.add_field(
+                name="📊 능력치",
+                value=f"**체력**: ❤️ {char['hp']}/{char['max_hp']}\n"
+                      f"**마나**: 💙 {char['mp']}/{char['max_mp']}\n"
+                      f"**식량**: 🍞 {char['food']}",
+                inline=True
+            )
+
+            # 3. 전투 능력치 필드
+            embed.add_field(
+                name="⚔️ 전투력",
+                value=f"**공격력**: {char['attack']}\n"
+                      f"**방어력**: {char['defense']}\n"
+                      f"**골드**: 💰 {char.get('gold', 0)} G",
+                inline=True
+            )
+
+            # 4. 장착 장비 필드
+            equipped_items_str = []
+            for item in inventory_data:
+                if item['is_equipped']:
+                    type_icon = {'WEAPON': '🗡️', 'ARMOR': '🛡️'}.get(item['item_type'], '🔹')
+                    equipped_items_str.append(f"{type_icon} {item['name']}")
+            
+            embed.add_field(
+                name="🎽 장착 장비",
+                value='\n'.join(equipped_items_str) if equipped_items_str else "장착한 장비가 없습니다.",
+                inline=False
+            )
+
+            # 5. 가방 필드
+            inventory_items_str = [f" • {item['name']} x{item['quantity']}" for item in inventory_data if not item['is_equipped']]
+            
+            embed.add_field(
+                name="🎒 가방",
+                value='\n'.join(inventory_items_str) if inventory_items_str else "가방이 비어있습니다.",
+                inline=False
+            )
+            
+            embed.set_footer(text=f"캐릭터 ID: {character_id}")
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
         except Exception as e:
-            logging.error(f"/내정보 명령어 처리 중 오류 발생: {e}", exc_info=True)
+            logging.error(f"/던전 정보 명령어 처리 중 오류 발생: {e}", exc_info=True)
             await interaction.response.send_message("❌ 정보를 불러오는 중 오류가 발생했습니다.", ephemeral=True)
 
-    @app_commands.command(name="test_phase0", description="[테스트] Phase 0 기능을 테스트합니다.")
+    @dungeon.command(name="테스트", description="[테스트] Phase 0 기능을 테스트합니다.")
     async def test_phase0(self, interaction: discord.Interaction):
         """Phase 0 테스트용 명령어"""
         game_manager = None
