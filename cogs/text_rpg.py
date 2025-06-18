@@ -5,6 +5,9 @@ import logging
 from database_manager import execute_query
 import json
 import sentry_sdk
+import io
+from main import is_admin_or_developer
+from game.renderer import TERRAIN_EMOJIS
 
 # 데이터 버전 상수는 cogs/database.py에서 중앙 관리하므로 여기서는 제거합니다.
 
@@ -371,6 +374,47 @@ class TextRPG(commands.Cog):
         except Exception as e:
             logging.error(f"/던전 정보 명령어 처리 중 오류 발생: {e}", exc_info=True)
             await interaction.response.send_message("❌ 정보를 불러오는 중 오류가 발생했습니다.", ephemeral=True)
+
+    @dungeon.command(name="맵보기", description="[개발자] 현재 생성된 던전의 전체 맵을 파일로 확인합니다.")
+    async def view_map(self, interaction: discord.Interaction):
+        if not is_admin_or_developer(interaction):
+            await interaction.response.send_message("❌ 이 명령어는 개발자만 사용할 수 있습니다.", ephemeral=True)
+            return
+            
+        user_id = interaction.user.id
+        if user_id not in active_game_sessions:
+            await interaction.response.send_message("실행 중인 게임 세션이 없습니다. `/던전 테스트`를 먼저 실행해주세요.", ephemeral=True)
+            return
+            
+        try:
+            game_manager = active_game_sessions[user_id]["manager"]
+            dungeon = game_manager.dungeon
+            player = game_manager.player
+
+            map_str = ""
+            for y in range(dungeon.height):
+                row_str = ""
+                for x in range(dungeon.width):
+                    if x == player.x and y == player.y:
+                        row_str += TERRAIN_EMOJIS['player']
+                    else:
+                        tile = dungeon.tiles[y][x]
+                        # 중앙화된 TERRAIN_EMOJIS 딕셔너리에서 이모지를 가져옵니다.
+                        # 'visible' 상태의 이모지를 기본으로 사용합니다.
+                        row_str += TERRAIN_EMOJIS['visible'].get(tile.terrain, '?')
+                map_str += row_str + "\n"
+            
+            if not map_str:
+                await interaction.response.send_message("맵 데이터를 생성할 수 없습니다.", ephemeral=True)
+                return
+
+            file = discord.File(io.StringIO(map_str), filename="dungeon_map.txt")
+            await interaction.response.send_message("현재 던전의 전체 맵입니다.", file=file, ephemeral=True)
+
+        except Exception as e:
+            logging.error(f"맵 보기 기능 처리 중 오류: {e}", exc_info=True)
+            await interaction.response.send_message("맵을 불러오는 중 오류가 발생했습니다.", ephemeral=True)
+
 
     @dungeon.command(name="테스트", description="[테스트] Phase 0 기능을 테스트합니다.")
     async def test_phase0(self, interaction: discord.Interaction):
