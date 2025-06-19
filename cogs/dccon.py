@@ -334,6 +334,7 @@ class DcconImageView(discord.ui.View):
         self.cog = cog
         self.title = title
         self.processed_images = processed_images # {'url', 'path', 'error'}
+        self.displayable_images = [img for img in self.processed_images if not img.get('error')]
         self.author = author
         self.current_page = 0
         self.message: Optional[discord.WebhookMessage] = None
@@ -341,17 +342,13 @@ class DcconImageView(discord.ui.View):
 
     def create_embed(self) -> discord.Embed:
         """현재 페이지에 맞는 임베드를 생성합니다."""
-        current_image = self.processed_images[self.current_page]
-        error_message = current_image.get('error')
+        current_image = self.displayable_images[self.current_page]
 
         embed = discord.Embed(
             title=f"디시콘: {self.title}",
-            description=f"페이지: {self.current_page + 1}/{len(self.processed_images)}",
-            color=discord.Color.red() if error_message else discord.Color.blue()
+            description=f"페이지: {self.current_page + 1}/{len(self.displayable_images)}",
+            color=discord.Color.blue()
         )
-
-        if error_message:
-            embed.add_field(name="⚠️ 표시할 수 없는 이미지", value=error_message, inline=False)
 
         embed.set_footer(text=f"요청자: {self.author.display_name}")
         return embed
@@ -365,14 +362,13 @@ class DcconImageView(discord.ui.View):
         
         # 이전/다음 버튼 상태 업데이트
         if prev_button: prev_button.disabled = self.current_page == 0
-        if next_button: next_button.disabled = self.current_page >= len(self.processed_images) - 1
+        if next_button: next_button.disabled = self.current_page >= len(self.displayable_images) - 1
 
-        # 현재 이미지에 오류가 있는지 확인
-        has_error = self.processed_images[self.current_page].get('error') is not None
+        is_empty = not self.displayable_images
         
-        # 오류가 있는 이미지의 경우 즐겨찾기/보내기 비활성화
-        if favorite_button: favorite_button.disabled = has_error
-        if select_button: select_button.disabled = has_error
+        # 이미지가 없으면 즐겨찾기/보내기 비활성화
+        if favorite_button: favorite_button.disabled = is_empty
+        if select_button: select_button.disabled = is_empty
 
 
     async def handle_interaction(self, interaction: discord.Interaction):
@@ -383,7 +379,7 @@ class DcconImageView(discord.ui.View):
         
         self.update_buttons()
         
-        current_image = self.processed_images[self.current_page]
+        current_image = self.displayable_images[self.current_page]
         filepath = current_image.get('path')
         
         embed = self.create_embed()
@@ -395,7 +391,8 @@ class DcconImageView(discord.ui.View):
             attachments.append(discord.File(filepath, filename=filename))
         
         try:
-            await interaction.response.edit_message(embed=embed, view=self, attachments=attachments)
+            # defer()는 버튼 콜백에서 호출되므로, 여기서는 original_response를 수정합니다.
+            await interaction.edit_original_response(embed=embed, view=self, attachments=attachments)
         except discord.NotFound:
             print("[⚠️] 사용자가 원본 메시지를 삭제하여 상호작용에 응답할 수 없습니다.")
             self.stop()
@@ -410,7 +407,7 @@ class DcconImageView(discord.ui.View):
 
     @discord.ui.button(label="⭐ 즐겨찾기", style=discord.ButtonStyle.primary, custom_id="favorite_dccon")
     async def favorite_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_image = self.processed_images[self.current_page]
+        current_image = self.displayable_images[self.current_page]
         current_image_url = current_image['url']
         
         if await is_dccon_favorited(self.author.id, current_image_url):
@@ -442,7 +439,7 @@ class DcconImageView(discord.ui.View):
         """현재 디시콘을 채널에 전송합니다."""
         await interaction.response.defer()
 
-        filepath = self.processed_images[self.current_page].get('path')
+        filepath = self.displayable_images[self.current_page].get('path')
         if not filepath:
              await interaction.followup.send("전송할 파일이 없습니다.", ephemeral=True)
              return
@@ -467,7 +464,7 @@ class DcconImageView(discord.ui.View):
     @discord.ui.button(label="다음 ▶", style=discord.ButtonStyle.grey, custom_id="next_page")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        if self.current_page < len(self.processed_images) - 1:
+        if self.current_page < len(self.displayable_images) - 1:
             self.current_page += 1
         await self.handle_interaction(interaction)
         
@@ -581,8 +578,22 @@ class DcconSelect(discord.ui.Select):
             author=interaction.user
         )
         
+        if not image_view.displayable_images:
+            failed_reasons = [img['error'] for img in processed_images if img['error']]
+            error_summary = "\n".join(list(set(failed_reasons))[:5])
+            await interaction.edit_original_response(content=f"모든 이미지 처리 중 오류가 발생하여 표시할 디시콘이 없습니다. 😥\n**주요 원인:**\n```\n{error_summary}\n```")
+            # 모든 임시 파일 정리
+            paths_to_delete = [img['path'] for img in processed_images if img.get('path')]
+            for path in paths_to_delete:
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+            return
+
         # 표시할 첫 번째 유효한 이미지를 찾음
-        first_valid_image = successful_images[0]
+        first_valid_image = image_view.displayable_images[0]
         first_image_path = first_valid_image['path']
         
         file = discord.File(first_image_path, filename=os.path.basename(first_image_path))
@@ -590,7 +601,7 @@ class DcconSelect(discord.ui.Select):
         embed.set_image(url=f"attachment://{os.path.basename(first_image_path)}")
         
         total_count = len(processed_images)
-        success_count = len(successful_images)
+        success_count = len(image_view.displayable_images)
         
         message_content = f"**{details['info']['title']}** 디시콘을 표시합니다. (총 {total_count}개 중 {success_count}개 성공)"
         if total_count != success_count:
