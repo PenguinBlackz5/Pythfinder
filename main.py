@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord.ext import commands
 from datetime import datetime, timedelta
@@ -17,7 +18,7 @@ import logging
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 
-from database_manager import get_db_connection, execute_query
+from database_manager import get_db_connection, execute_query, get_db_pool
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -410,7 +411,7 @@ class AttendanceBot(commands.Bot):
         self._message_sent = set()
         self._attendance_cache = {}
         self._message_history = {}
-        self._message_lock = {}
+        self._message_lock = asyncio.Lock()
 
     @property
     def processing_messages(self):
@@ -467,27 +468,26 @@ class AttendanceBot(commands.Bot):
         return False
 
     async def setup_hook(self):
-        """봇이 시작될 때 실행되는 설정"""
-        print("\n=== 봇 초기화 시작 ===", flush=True)
+        # 데이터베이스 연결 풀 생성
+        await get_db_pool()
 
-        # 데이터베이스 초기화
-        print("데이터베이스 초기화 중...", flush=True)
-        try:
-            # await self.init_database()
-            print("데이터베이스 초기화 완료", flush=True)
-        except Exception as e:
-            logger.error(f"데이터베이스 초기화 오류: {e}")
+        # sql/ 디렉토리의 모든 .sql 파일을 읽어 테이블 생성
+        sql_dir = 'sql'
+        if os.path.isdir(sql_dir):
+            for filename in sorted(os.listdir(sql_dir)):
+                if filename.endswith('.sql'):
+                    filepath = os.path.join(sql_dir, filename)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            sql_script = f.read()
+                            # 주석 등을 제외하고 실제 쿼리가 있는지 확인
+                            if sql_script.strip():
+                                await execute_query(sql_script)
+                                print(f"✅ SQL 스크립트 '{filename}' 실행 완료.")
+                    except Exception as e:
+                        print(f"❌ SQL 스크립트 '{filename}' 실행 중 오류 발생: {e}")
 
-        # 출석 채널 로드
-        print("출석 채널 로드 중...", flush=True)
-        try:
-            await self.load_attendance_channels()
-            print("출석 채널 로드 완료", flush=True)
-        except Exception as e:
-            logger.error(f"출석 채널 로드 오류: {e}")
-
-        # cogs 디렉토리에서 모든 cog 파일 로드
-        print("Cog 파일 로드 중...", flush=True)
+        # Cogs 로드
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 try:
