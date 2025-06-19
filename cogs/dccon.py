@@ -12,6 +12,8 @@ import asyncio
 import uuid
 import shutil
 from PIL import Image, ImageSequence
+import hashlib
+import time
 
 # --- 데이터베이스 함수 임포트 ---
 from database_manager import (
@@ -34,37 +36,17 @@ class DcconScraper:
         self.base_url = "https://m.dcinside.com"
 
     def get_app_id(self) -> (Optional[str], Optional[str]):
-        """JAR 파일을 실행하여 app_id를 가져옵니다. (app_id, error_message) 튜플을 반환합니다."""
-        jar_path = os.path.join("appid_generator", "build", "libs", "appid_generator-1.0-SNAPSHOT-all.jar")
-        if not os.path.exists(jar_path):
-            error = f"❌ JAR 파일을 찾을 수 없습니다: {os.path.abspath(jar_path)}"
-            print(error)
-            return None, error
-        
-        command = ["java", "-jar", jar_path]
+        """Python 네이티브 코드로 app_id를 생성합니다. (app_id, error_message) 튜플을 반환합니다."""
         try:
-            # Render 환경에서는 JAR 실행이 오래 걸릴 수 있으므로 타임아웃을 15초로 설정
-            result = subprocess.run(
-                command, 
-                capture_output=True, 
-                text=True, 
-                check=True, 
-                encoding='utf-8',
-                timeout=15
-            )
-            # Java 에러가 stderr로 출력될 수 있음
-            if result.stderr:
-                error = f"❌ app_id 생성기 실행 중 오류 발생 (stderr):\n{result.stderr}"
-                print(error)
-                return None, error
-
-            return result.stdout.strip(), None
-        except subprocess.TimeoutExpired:
-            error = "❌ app_id 생성 시간이 초과되었습니다 (15초). Render 환경의 CPU 성능 문제일 수 있습니다."
-            print(error)
-            return None, error
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            error = f"❌ app_id 생성 중 오류 발생: {e}"
+            # KotlinInside 라이브러리의 app_id 생성 로직을 Python으로 재현
+            # "dcinside.app" 문자열과 현재 타임스탬프(밀리초)를 조합하여 MD5 해시 생성
+            current_time_millis = int(time.time() * 1000)
+            app_id_raw = f"dcinside.app{current_time_millis}"
+            app_id = hashlib.md5(app_id_raw.encode()).hexdigest()
+            print(f"✅ Python 네이티브 app_id 생성 성공: {app_id}")
+            return app_id, None
+        except Exception as e:
+            error = f"❌ Python 네이티브 app_id 생성 중 오류 발생: {e}"
             print(error)
             return None, error
 

@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libnacl-dev \
     build-essential \
-    openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # requirements.txt 복사 및 Python 패키지 설치
