@@ -381,7 +381,6 @@ class DcconImageView(discord.ui.View):
             await interaction.response.send_message("명령어를 실행한 사용자만 조작할 수 있습니다.", ephemeral=True)
             return
         
-        await interaction.response.defer()
         self.update_buttons()
         
         current_image = self.processed_images[self.current_page]
@@ -395,10 +394,16 @@ class DcconImageView(discord.ui.View):
             embed.set_image(url=f"attachment://{filename}")
             attachments.append(discord.File(filepath, filename=filename))
         
-        await interaction.edit_original_response(embed=embed, view=self, attachments=attachments)
+        try:
+            await interaction.response.edit_message(embed=embed, view=self, attachments=attachments)
+        except discord.NotFound:
+            print("[⚠️] 사용자가 원본 메시지를 삭제하여 상호작용에 응답할 수 없습니다.")
+            self.stop()
+            await self.cleanup_files()
 
     @discord.ui.button(label="◀ 이전", style=discord.ButtonStyle.grey, custom_id="prev_page")
     async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         if self.current_page > 0:
             self.current_page -= 1
         await self.handle_interaction(interaction)
@@ -461,6 +466,7 @@ class DcconImageView(discord.ui.View):
 
     @discord.ui.button(label="다음 ▶", style=discord.ButtonStyle.grey, custom_id="next_page")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         if self.current_page < len(self.processed_images) - 1:
             self.current_page += 1
         await self.handle_interaction(interaction)
@@ -637,7 +643,6 @@ class Dccon(commands.Cog):
                 print(f"✅ APNG 감지됨 ({img.n_frames} 프레임). GIF로 변환을 시작합니다.")
                 final_filepath = temp_filepath + ".gif"
                 
-                # Pillow의 공식적인 APNG -> GIF 변환 방식 사용
                 img.save(final_filepath, 'GIF', save_all=True, append_images=list(ImageSequence.Iterator(img))[1:], loop=0, disposal=2)
                 print(f"-> GIF 변환 완료: {final_filepath}")
 
@@ -650,7 +655,7 @@ class Dccon(commands.Cog):
                 
                 img.close()
                 img = None # 핸들이 닫혔음을 명시
-                os.rename(temp_filepath, final_filepath)
+                shutil.move(temp_filepath, final_filepath) # os.rename 대신 shutil.move 사용
 
             # 변환/저장 후 파일 크기 확인
             final_size = os.path.getsize(final_filepath)
@@ -666,16 +671,16 @@ class Dccon(commands.Cog):
             return final_filepath, None
 
         except Exception as e:
-            print(f"--- ❌ 이미지 변환 중 오류: {e} ---")
+            error_msg = "이미지 처리 중 오류가 발생했습니다."
+            print(f"--- ❌ {error_msg} (상세: {e}) ---")
             # 변환 실패 시 생성되었을 수 있는 파일 삭제
             if final_filepath and os.path.exists(final_filepath):
                 os.remove(final_filepath)
-            return None, f"이미지 변환 중 오류 발생: {e}"
+            return None, error_msg
         finally:
             if img:
                 img.close()
             # 원본 임시 파일(확장자 없는)이 남아있다면 삭제
-            # rename의 경우 원본이 사라지지만, save의 경우 원본이 남기 때문
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
 
@@ -778,7 +783,11 @@ class Dccon(commands.Cog):
             embed.add_field(name=f"{i+1}. {result['name']}", value=description, inline=False)
         
         # 첫 번째 결과의 미리보기 이미지를 썸네일로 설정 (이제는 로컬 파일로)
-        temp_image_path, _ = await self.download_image(session, search_results[0]['thumbnail_url'])
+        temp_image_path = None
+        if search_results and search_results[0].get('thumbnail_url'):
+            async with aiohttp.ClientSession() as session:
+                # 썸네일 다운로드는 실패해도 전체 기능에 영향이 없도록 간단히 처리
+                temp_image_path, _ = await self.download_image(session, search_results[0]['thumbnail_url'])
 
         file = None
         if temp_image_path:
