@@ -35,7 +35,7 @@ class DcconScraper:
 
     def get_app_id(self) -> (Optional[str], Optional[str]):
         """JAR 파일을 실행하여 app_id를 가져옵니다. (app_id, error_message) 튜플을 반환합니다."""
-        jar_path = os.path.join("appid_generator", "build", "libs", "appid_generator-1.0-SNAPSHOT-all.jar")
+        jar_path = os.path.join("appid_generator", "build", "libs", "appid_generator-1.0-SNAPSHOT.jar")
         if not os.path.exists(jar_path):
             error = f"❌ JAR 파일을 찾을 수 없습니다: {os.path.abspath(jar_path)}"
             print(error)
