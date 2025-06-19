@@ -14,3 +14,4 @@ protobuf~=5.29.5
 pillow~=11.2.1
 pynacl~=1.5.0
 google-genai~=1.19.0
+beautifulsoup4~=4.12.3
