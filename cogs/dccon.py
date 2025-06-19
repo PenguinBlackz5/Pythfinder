@@ -33,20 +33,40 @@ class DcconScraper:
         self.csrf_token = None
         self.base_url = "https://m.dcinside.com"
 
-    def get_app_id(self) -> Optional[str]:
-        """JAR 파일을 실행하여 app_id를 가져옵니다."""
-        jar_path = os.path.join("appid_generator", "build", "libs", "appid_generator-1.0-SNAPSHOT.jar")
+    def get_app_id(self) -> (Optional[str], Optional[str]):
+        """JAR 파일을 실행하여 app_id를 가져옵니다. (app_id, error_message) 튜플을 반환합니다."""
+        jar_path = os.path.join("appid_generator", "build", "libs", "appid_generator-1.0-SNAPSHOT-all.jar")
         if not os.path.exists(jar_path):
-            print(f"❌ JAR 파일을 찾을 수 없습니다: {jar_path}")
-            return None
+            error = f"❌ JAR 파일을 찾을 수 없습니다: {os.path.abspath(jar_path)}"
+            print(error)
+            return None, error
         
         command = ["java", "-jar", jar_path]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
-            return result.stdout.strip()
+            # Render 환경에서는 JAR 실행이 오래 걸릴 수 있으므로 타임아웃을 15초로 설정
+            result = subprocess.run(
+                command, 
+                capture_output=True, 
+                text=True, 
+                check=True, 
+                encoding='utf-8',
+                timeout=15
+            )
+            # Java 에러가 stderr로 출력될 수 있음
+            if result.stderr:
+                error = f"❌ app_id 생성기 실행 중 오류 발생 (stderr):\n{result.stderr}"
+                print(error)
+                return None, error
+
+            return result.stdout.strip(), None
+        except subprocess.TimeoutExpired:
+            error = "❌ app_id 생성 시간이 초과되었습니다 (15초). Render 환경의 CPU 성능 문제일 수 있습니다."
+            print(error)
+            return None, error
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"❌ app_id 생성 중 오류 발생: {e}")
-            return None
+            error = f"❌ app_id 생성 중 오류 발생: {e}"
+            print(error)
+            return None, error
 
     def search(self, keyword: str, limit: int = 25) -> List[Dict[str, str]]:
         """키워드로 디시콘을 검색하고, 상위 n개의 결과를 반환합니다."""
@@ -167,15 +187,16 @@ class DcconScraper:
         print(f"최종적으로 {len(results)}개의 디시콘 정보를 추출했습니다.")
         return results
 
-    def get_details(self, package_idx: str) -> Optional[Dict[str, Any]]:
-        """패키지 ID로 디시콘의 상세 정보(정보, 이미지 URL 목록)를 가져옵니다."""
+    def get_details(self, package_idx: str) -> (Optional[Dict[str, Any]], Optional[str]):
+        """패키지 ID로 디시콘 상세 정보(정보, 이미지 URL 목록)를 가져옵니다. (details, error_message) 튜플을 반환합니다."""
         if not self.csrf_token:
-            print("❌ CSRF 토큰이 없습니다. search()를 먼저 호출해야 합니다.")
-            return None
+            error = "❌ CSRF 토큰이 없습니다. search()를 먼저 호출해야 합니다."
+            print(error)
+            return None, error
 
-        app_id = self.get_app_id()
-        if not app_id:
-            return None
+        app_id, error_msg = self.get_app_id()
+        if error_msg:
+            return None, error_msg
 
         detail_url = f"{self.base_url}/dccon/getDcconDetail"
         data = {"dcconInfo": package_idx, "app_id": app_id}
@@ -195,18 +216,26 @@ class DcconScraper:
             info['maker'] = (soup.select_one('div.make > span.by') or soup.new_tag('span')).text.strip()
             info['description'] = (soup.select_one('div.txt') or soup.new_tag('p')).text.strip()
             
-            # 썸네일 이미지 선택자 수정
             main_img_tag = soup.select_one('div.dccon-caption-box div.thum-img > img')
             info['main_img_url'] = main_img_tag['src'] if main_img_tag else None
 
             image_urls = [img['src'] for img in soup.select('ul.dccon-img-lst img') if img.has_attr('src')]
             
-            if not image_urls: return None
-            return {'info': info, 'images': image_urls}
+            if not image_urls: 
+                error = "❌ 상세 정보 HTML 파싱 후 이미지 URL 목록을 찾지 못했습니다."
+                print(error)
+                return None, error
+            return {'info': info, 'images': image_urls}, None
 
         except requests.exceptions.RequestException as e:
-            print(f"❌ 상세 정보 요청 중 오류 발생: {e}")
-        return None
+            error = f"❌ 상세 정보 요청 중 네트워크 오류 발생: {e}"
+            print(error)
+            return None, error
+        except Exception as e:
+            import traceback
+            error = f"❌ 상세 정보 파싱 중 알 수 없는 오류 발생:\n{traceback.format_exc()}"
+            print(error)
+            return None, error
 
 
 # --- 즐겨찾기 뷰 ---
@@ -471,11 +500,23 @@ class DcconSelect(discord.ui.Select):
         )
         
         try:
-            details = self.cog.scraper.get_details(package_idx)
-            if not details or not details.get('images'):
-                # get_details 내부에서 이미 print로 로그를 남기므로 여기서는 사용자에게만 알림
-                await interaction.edit_original_response(content="디시콘 상세 정보를 가져오거나 이미지 목록을 찾는 데 실패했습니다. 😥\n(서버 로그를 확인해주세요)")
+            details, error_msg = self.cog.scraper.get_details(package_idx)
+            
+            # 에러가 있다면, 사용자에게 바로 보여줌
+            if error_msg:
+                error_embed = discord.Embed(
+                    title="오류 발생",
+                    description=f"디시콘 상세 정보를 가져오는 데 실패했습니다. 😥",
+                    color=discord.Color.red()
+                )
+                error_embed.add_field(name="서버 로그", value=f"```\n{error_msg[:1000]}\n```", inline=False)
+                await interaction.edit_original_response(embed=error_embed, content="", view=None, attachments=[])
                 return
+
+            # 위에서 에러를 잡았으므로, 여기서는 details가 확실히 있다고 가정할 수 있음
+            if not details or not details.get('images'):
+                 await interaction.edit_original_response(content="알 수 없는 이유로 디시콘 상세 정보를 가져오지 못했습니다. (이미지 목록 없음)")
+                 return
 
             image_paths = []
             async with aiohttp.ClientSession() as session:
