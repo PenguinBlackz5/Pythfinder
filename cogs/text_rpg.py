@@ -173,26 +173,67 @@ class GameUIView(discord.ui.View):
         self.renderer = renderer
         self.message = None
 
+        # '내려가기' 버튼 인스턴스를 미리 생성
+        self.stairs_button = discord.ui.Button(
+            label="내려가기",
+            style=discord.ButtonStyle.success, # 보일 때는 항상 활성화 상태이므로 success 스타일 사용
+            row=3,
+            custom_id="use_stairs"
+        )
+        self.stairs_button.callback = self.use_stairs_callback
+
+        # 버튼 상태 초기화
+        self.update_action_buttons()
+
+    def update_action_buttons(self):
+        """플레이어의 현재 위치에 따라 행동 버튼을 동적으로 추가/제거합니다."""
+        player = self.game_manager.player
+        current_tile = self.game_manager.dungeon.tiles[player.y][player.x]
+        
+        # '내려가기' 버튼이 이미 View에 있는지 확인
+        is_button_present = any(child.custom_id == 'use_stairs' for child in self.children)
+        
+        # 현재 타일이 계단일 경우
+        if current_tile.terrain == 'stairs_down':
+            if not is_button_present:
+                self.add_item(self.stairs_button) # 버튼 추가
+        # 계단이 아닐 경우
+        else:
+            if is_button_present:
+                self.remove_item(self.stairs_button) # 버튼 제거
+
+    async def update_view(self, interaction: discord.Interaction):
+        """게임 상태에 따라 전체 화면과 버튼을 다시 렌더링하고 업데이트합니다."""
+        # 1. 게임 상태 가져오기
+        game_state = self.game_manager.get_game_state()
+        
+        # 2. 화면 렌더링
+        rendered_screen = self.renderer.render_game_screen(**game_state)
+
+        # 3. 버튼 상태 업데이트
+        # 3.1. 모든 버튼을 일단 활성화
+        for item in self.children:
+            item.disabled = False
+        
+        # 3.2. 특정 조건에 따라 버튼 상태를 재조정
+        self.update_action_buttons()
+        
+        # 4. 메시지 수정
+        await interaction.edit_original_response(content=rendered_screen, view=self)
+
     async def handle_move(self, interaction: discord.Interaction, dx: int, dy: int):
         """플레이어 이동 및 화면 업데이트 처리"""
         try:
-            # 1. 입력 잠금: 모든 버튼 비활성화
+            # 1. 입력 잠금: 모든 버튼 비활성화 (피드백을 위해 즉시 반영)
             for item in self.children:
                 item.disabled = True
             await interaction.response.edit_message(view=self)
 
             # 2. 게임 로직 처리
             self.game_manager.move_player(dx, dy)
-            game_state = self.game_manager.get_game_state()
             
-            # 3. 화면 렌더링
-            rendered_screen = self.renderer.render_game_screen(**game_state)
-
-            # 4. 잠금 해제: 모든 버튼 활성화
-            for item in self.children:
-                item.disabled = False
-            
-            await interaction.edit_original_response(content=rendered_screen, view=self)
+            # 3. 화면 및 버튼 전체 업데이트
+            await self.update_view(interaction)
         
         except IndexError:
             p = self.game_manager.player
@@ -250,6 +291,31 @@ class GameUIView(discord.ui.View):
     @discord.ui.button(label="↘", style=discord.ButtonStyle.secondary, row=2)
     async def move_se(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_move(interaction, 1, 1)
+
+    # 행동 버튼 (이제 데코레이터가 아닌 일반 메서드)
+    async def use_stairs_callback(self, interaction: discord.Interaction):
+        """계단 이용 버튼 핸들러"""
+        try:
+            # 1. 입력 잠금
+            for item in self.children:
+                item.disabled = True
+            await interaction.response.edit_message(view=self)
+
+            # 2. 게임 로직 처리
+            success = self.game_manager.use_stairs()
+
+            if success:
+                 # 3. 화면 및 버튼 전체 업데이트 (새 층에서는 계단 버튼이 사라짐)
+                await self.update_view(interaction)
+            else:
+                # 계단이 없는 곳에서 눌렀을 경우 (이론상 불가능)
+                # 만약을 대비해 버튼을 다시 활성화하고 메시지를 보냄
+                await self.update_view(interaction) # 뷰를 다시 그려서 버튼 상태를 동기화
+                await interaction.followup.send("이곳에는 계단이 없습니다.", ephemeral=True)
+
+        except Exception as e:
+            logging.error(f"An unexpected error occurred in use_stairs_callback: {e}", exc_info=True)
+            await interaction.edit_original_response(content=f"계단 이용 중 알 수 없는 오류 발생: {e}", view=None)
 
 class TextRPG(commands.Cog):
     dungeon = app_commands.Group(name="던전", description="텍스트 로그라이크 게임 관련 명령어")
@@ -387,22 +453,17 @@ class TextRPG(commands.Cog):
             return
             
         try:
-            game_manager = active_game_sessions[user_id]["manager"]
-            dungeon = game_manager.dungeon
-            player = game_manager.player
+            session = active_game_sessions[user_id]
+            game_manager = session["manager"]
+            renderer = session["renderer"]
 
-            map_str = ""
-            for y in range(dungeon.height):
-                row_str = ""
-                for x in range(dungeon.width):
-                    if x == player.x and y == player.y:
-                        row_str += TERRAIN_EMOJIS['player']
-                    else:
-                        tile = dungeon.tiles[y][x]
-                        # 중앙화된 TERRAIN_EMOJIS 딕셔너리에서 이모지를 가져옵니다.
-                        # 'visible' 상태의 이모지를 기본으로 사용합니다.
-                        row_str += TERRAIN_EMOJIS['visible'].get(tile.terrain, '?')
-                map_str += row_str + "\n"
+            # 렌더러의 새 메서드를 사용하여 전체 맵 렌더링
+            map_str = renderer.render_full_map(
+                dungeon=game_manager.dungeon,
+                player=game_manager.player,
+                monsters=game_manager.monsters,
+                items=game_manager.items
+            )
             
             if not map_str:
                 await interaction.response.send_message("맵 데이터를 생성할 수 없습니다.", ephemeral=True)
@@ -415,6 +476,49 @@ class TextRPG(commands.Cog):
             logging.error(f"맵 보기 기능 처리 중 오류: {e}", exc_info=True)
             await interaction.response.send_message("맵을 불러오는 중 오류가 발생했습니다.", ephemeral=True)
 
+    @dungeon.command(name="텔레포트", description="[개발자] 지정된 방 ID의 중심으로 순간이동합니다.")
+    @app_commands.describe(room_id="이동할 방의 ID")
+    async def teleport(self, interaction: discord.Interaction, room_id: int):
+        if not is_admin_or_developer(interaction):
+            await interaction.response.send_message("❌ 이 명령어는 개발자만 사용할 수 있습니다.", ephemeral=True)
+            return
+
+        user_id = interaction.user.id
+        if user_id not in active_game_sessions:
+            await interaction.response.send_message("실행 중인 게임 세션이 없습니다. `/던전 테스트`를 먼저 실행해주세요.", ephemeral=True)
+            return
+
+        # 1. 상호작용을 지연시켜 "처리 중" 상태로 만듦
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            session = active_game_sessions[user_id]
+            game_manager = session["manager"]
+            view = session.get("view") # 세션에서 view 가져오기
+            
+            success = game_manager.teleport_to_room(room_id)
+
+            if success and view and view.message:
+                # 2. 게임 상태를 가져와 화면을 다시 렌더링
+                game_state = game_manager.get_game_state()
+                rendered_screen = view.renderer.render_game_screen(**game_state)
+                view.update_action_buttons()
+                
+                # 3. 원래 게임 메시지를 수정하여 화면을 갱신
+                await view.message.edit(content=rendered_screen, view=view)
+                
+                # 4. 후속 응답으로 성공 메시지 전송
+                await interaction.followup.send(f"✅ {room_id}번 방으로 성공적으로 이동했습니다.", ephemeral=True)
+            elif not success:
+                await interaction.followup.send(f"❌ {room_id}번 방을 찾을 수 없습니다.", ephemeral=True)
+            else:
+                await interaction.followup.send("⚠️ 텔레포트는 성공했으나, 화면을 찾을 수 없어 새로고침하지 못했습니다.", ephemeral=True)
+
+        except Exception as e:
+            logging.error(f"텔레포트 기능 처리 중 오류: {e}", exc_info=True)
+            # 이미 defer된 상호작용이므로 followup으로 응답
+            if not interaction.is_done():
+                await interaction.followup.send("텔레포트 중 오류가 발생했습니다.", ephemeral=True)
 
     @dungeon.command(name="테스트", description="[테스트] Phase 0 기능을 테스트합니다.")
     async def test_phase0(self, interaction: discord.Interaction):
@@ -426,19 +530,20 @@ class TextRPG(commands.Cog):
             # 새로운 게임 세션 시작
             game_manager = GameManager()
             renderer = Renderer()
+            view = GameUIView(game_manager, renderer) # 뷰를 먼저 생성
             
             active_game_sessions[user_id] = {
                 "manager": game_manager,
-                "renderer": renderer
+                "renderer": renderer,
+                "view": view # 세션에 뷰 인스턴스 저장
             }
 
             game_state = game_manager.get_game_state()
             rendered_screen = renderer.render_game_screen(**game_state)
             
-            view = GameUIView(game_manager, renderer)
-
             await interaction.response.send_message(rendered_screen, view=view)
             
+            # 뷰가 제어할 메시지를 저장
             view.message = await interaction.original_response()
 
         except IndexError:

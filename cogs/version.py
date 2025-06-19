@@ -136,24 +136,34 @@ class Version(commands.Cog):
                     # 로컬 커밋 날짜 포맷팅 (존재하는 경우)
                     if self.local_commit_date:
                         local_formatted_date = self.local_commit_date.astimezone(kst_timezone).strftime(common_format)
+                        deploy_dt = self.local_commit_date.astimezone(kst_timezone) # 비교를 위해 datetime 객체 저장
                     else:
                         # Git 정보를 못 가져왔을 때의 대체 시간 포맷팅
                         try:
                             # 'YYYY-MM-DD HH:MM:SS' 형식의 deploy_time을 datetime 객체로 파싱
-                            deploy_dt = datetime.datetime.strptime(self.deploy_time, '%Y-%m-%d %H:%M:%S')
+                            deploy_dt = datetime.datetime.strptime(self.deploy_time, '%Y-%m-%d %H:%M:%S').replace(tzinfo=kst_timezone)
                             local_formatted_date = deploy_dt.strftime(common_format)
                         except ValueError:
+                            deploy_dt = None
                             local_formatted_date = self.deploy_time # 파싱 실패 시 원본 표시
 
                     # 버전 비교 로직 개선
                     is_local_version_available = self.local_commit_hash not in ["정보 없음", "봇 실행 시간"]
 
                     if is_local_version_available:
+                        # 로컬 Git 정보가 있을 경우: 커밋 해시로 비교
                         is_latest = self.local_commit_hash == remote_commit_hash
                         status_emoji = "✅" if is_latest else "⚠️"
                         status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
                         color = 0x00ff00 if is_latest else 0xffcc00
+                    elif deploy_dt:
+                        # 로컬 Git 정보가 없을 경우: 봇 시작 시간과 최신 커밋 시간으로 비교
+                        is_latest = deploy_dt >= remote_commit_date_kst
+                        status_emoji = "✅" if is_latest else "⚠️"
+                        status_text = "최신 버전입니다!" if is_latest else "업데이트가 필요합니다!"
+                        color = 0x00ff00 if is_latest else 0xffcc00
                     else:
+                        # 시간 정보도 없을 경우 (최악의 경우)
                         is_latest = False
                         status_emoji = "❓"
                         status_text = "로컬 버전을 확인할 수 없어, 업데이트 필요 여부를 판단할 수 없습니다."

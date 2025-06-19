@@ -86,9 +86,18 @@ class Dungeon:
         self._corridor_id_counter = 0
         self._generate_rooms()
         self._connect_all_rooms()
+
         # 플레이어 시작 위치 (첫 번째 방의 중앙)
         if self.rooms:
             self.player_start_x, self.player_start_y = self.rooms[0].center()
+            
+            # 계단 생성 (마지막 방의 중앙)
+            last_room_x, last_room_y = self.rooms[-1].center()
+            self.tiles[last_room_y][last_room_x].terrain = 'stairs_down'
+            # 계단은 막혀있지 않아야 함
+            self.tiles[last_room_y][last_room_x].blocked = False
+            self.tiles[last_room_y][last_room_x].block_sight = False
+
         else: # 방이 하나도 생성되지 않은 경우
             self.player_start_x, self.player_start_y = self.width // 2, self.height // 2
 
