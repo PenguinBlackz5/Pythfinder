@@ -470,19 +470,32 @@ class DcconSelect(discord.ui.Select):
             view=None, embed=None, attachments=[]
         )
         
-        details = self.cog.scraper.get_details(package_idx)
-        if not details or not details.get('images'):
-            await interaction.edit_original_response(content="디시콘 상세 정보를 가져오거나 이미지 목록을 찾는 데 실패했습니다.")
-            return
+        try:
+            details = self.cog.scraper.get_details(package_idx)
+            if not details or not details.get('images'):
+                # get_details 내부에서 이미 print로 로그를 남기므로 여기서는 사용자에게만 알림
+                await interaction.edit_original_response(content="디시콘 상세 정보를 가져오거나 이미지 목록을 찾는 데 실패했습니다. 😥\n(서버 로그를 확인해주세요)")
+                return
 
-        image_paths = []
-        async with aiohttp.ClientSession() as session:
-            tasks = [self.cog.download_image(session, url) for url in details['images']]
-            download_results = await asyncio.gather(*tasks)
-            image_paths = [path for path in download_results if path]
+            image_paths = []
+            async with aiohttp.ClientSession() as session:
+                tasks = [self.cog.download_image(session, url) for url in details['images']]
+                download_results = await asyncio.gather(*tasks)
+                image_paths = [path for path in download_results if path]
 
-        if not image_paths:
-            await interaction.edit_original_response(content="이미지를 다운로드하는 데 실패했습니다. 😥")
+            if not image_paths:
+                await interaction.edit_original_response(content="이미지를 다운로드하는 데 실패했습니다. 😥")
+                return
+        
+        except Exception as e:
+            # traceback을 사용하여 더 상세한 에러 정보 로깅
+            import traceback
+            error_details = f"```\n{traceback.format_exc()}\n```"
+            print(f"❌ DcconSelect 콜백에서 예외 발생: {e}")
+            await interaction.edit_original_response(
+                content=f"디시콘을 불러오는 중 심각한 오류가 발생했습니다. 😥\n**오류 내용:**\n{error_details}",
+                view=None, embed=None, attachments=[]
+            )
             return
 
         image_view = DcconImageView(

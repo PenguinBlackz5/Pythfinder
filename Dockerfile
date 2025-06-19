@@ -1,8 +1,16 @@
+
+FROM gradle:7.6.4-jdk17 AS builder
+WORKDIR /home/gradle/project
+COPY appid_generator/ .
+RUN chmod +x ./gradlew
+RUN ./gradlew clean shadowJar
+
 FROM python:3.13
 
 WORKDIR /app
 
 # 시스템 패키지 업데이트 및 필수 패키지 설치
+# OpenJDK (Java) 추가
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
@@ -13,7 +21,10 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libnacl-dev \
     build-essential \
+    openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /home/gradle/project/build/libs/appid_generator-1.0-SNAPSHOT-all.jar /app/appid_generator/build/libs/
 
 # requirements.txt 복사 및 Python 패키지 설치
 COPY requirements.txt .
