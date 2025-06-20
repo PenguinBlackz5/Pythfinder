@@ -251,6 +251,7 @@ class FavoriteDcconView(discord.ui.View):
         self.current_page = 0
         self.message: Optional[discord.WebhookMessage] = None
         self.current_temp_file_path: Optional[str] = None
+        self.current_image_dimensions: Optional[tuple] = None
         self.update_buttons()
 
     def create_embed(self) -> discord.Embed:
@@ -297,13 +298,14 @@ class FavoriteDcconView(discord.ui.View):
         image_url = fav['image_url']
         
         async with aiohttp.ClientSession() as session:
-            path, error = await self.cog.download_image(session, image_url)
+            path, error, dims = await self.cog.download_image(session, image_url)
         
         if error:
             await interaction.response.edit_message(content=f"오류: 이미지를 불러올 수 없습니다.\n> {error}", view=self, embed=None, attachments=[])
             return
 
         self.current_temp_file_path = path
+        self.current_image_dimensions = dims
         filename = os.path.basename(path)
         embed = self.create_embed()
         embed.set_image(url=f"attachment://{filename}")
@@ -319,7 +321,6 @@ class FavoriteDcconView(discord.ui.View):
         except FileNotFoundError:
             await interaction.edit_original_response(content=f"오류: 임시 파일을 찾을 수 없습니다.", view=self, embed=None, attachments=[])
 
-
     @discord.ui.button(label="◀", style=discord.ButtonStyle.grey, custom_id="fav_prev")
     async def prev_button(self, i: discord.Interaction, b: discord.ui.Button):
         await i.response.defer()
@@ -332,12 +333,30 @@ class FavoriteDcconView(discord.ui.View):
         if not self.current_temp_file_path:
             await i.followup.send("전송할 파일이 없습니다.", ephemeral=True)
             return
+
+        filepath_to_send = self.current_temp_file_path
+        upscaled_filepath = None
             
         try:
+            # 100x100 이미지는 200x200으로 확대해서 전송
+            if self.current_image_dimensions == (100, 100):
+                print(f"INFO: 100x100 즐겨찾기 이미지 전송 시 200x200으로 확대합니다.")
+                base, ext = os.path.splitext(self.current_temp_file_path)
+                upscaled_filepath = f"{base}_200px{ext}"
+                with Image.open(self.current_temp_file_path) as img:
+                    resize_method = Image.Resampling.NEAREST
+                    if hasattr(img, 'n_frames') and img.n_frames > 1:
+                        frames = [frame.resize((200, 200), resize_method) for frame in ImageSequence.Iterator(img)]
+                        frames[0].save(upscaled_filepath, 'WEBP', save_all=True, append_images=frames[1:], loop=0, quality=85, minimize_size=True)
+                    else:
+                        resized_img = img.resize((200, 200), resize_method)
+                        resized_img.save(upscaled_filepath)
+                    filepath_to_send = upscaled_filepath
+            
             current_fav = self.favorites[self.current_page]
             title = current_fav['dccon_title']
-            filename = os.path.basename(self.current_temp_file_path)
-            with open(self.current_temp_file_path, 'rb') as f:
+            filename = os.path.basename(filepath_to_send)
+            with open(filepath_to_send, 'rb') as f:
                 file = discord.File(f, filename=filename)
                 
                 embed = discord.Embed(color=discord.Color.gold())
@@ -349,8 +368,14 @@ class FavoriteDcconView(discord.ui.View):
                 await i.delete_original_response()
         except Exception as e:
             await i.followup.send(f"오류: {e}", ephemeral=True)
+        finally:
+            # 확대된 임시 파일이 있다면 삭제
+            if upscaled_filepath and os.path.exists(upscaled_filepath):
+                try: os.remove(upscaled_filepath)
+                except OSError: pass
         
         self.stop()
+        await self._cleanup_file()
 
     @discord.ui.button(label="💔 삭제", style=discord.ButtonStyle.danger, custom_id="fav_delete")
     async def delete_button(self, i: discord.Interaction, b: discord.ui.Button):
@@ -397,6 +422,7 @@ class DcconImageView(discord.ui.View):
         self.message: Optional[discord.WebhookMessage] = None
         self.current_temp_file_path: Optional[str] = None
         self.current_error: Optional[str] = None
+        self.current_image_dimensions: Optional[tuple] = None
         self.update_buttons()
 
     def create_embed(self) -> discord.Embed:
@@ -453,10 +479,11 @@ class DcconImageView(discord.ui.View):
 
         # 이미지 다운로드 및 처리
         async with aiohttp.ClientSession() as session:
-            path, error = await self.cog.download_image(session, current_url)
+            path, error, dims = await self.cog.download_image(session, current_url)
         
         self.current_temp_file_path = path
         self.current_error = error
+        self.current_image_dimensions = dims
         
         # UI 업데이트 (버튼, 임베드)
         self.update_buttons()
@@ -511,9 +538,27 @@ class DcconImageView(discord.ui.View):
              await interaction.followup.send("전송할 파일이 없습니다.", ephemeral=True)
              return
 
+        filepath_to_send = self.current_temp_file_path
+        upscaled_filepath = None
+
         try:
-            filename = os.path.basename(self.current_temp_file_path)
-            with open(self.current_temp_file_path, 'rb') as f:
+            # 100x100 이미지는 200x200으로 확대해서 전송
+            if self.current_image_dimensions == (100, 100):
+                print(f"INFO: 100x100 이미지 전송 시 200x200으로 확대합니다.")
+                base, ext = os.path.splitext(self.current_temp_file_path)
+                upscaled_filepath = f"{base}_200px{ext}"
+                with Image.open(self.current_temp_file_path) as img:
+                    resize_method = Image.Resampling.NEAREST
+                    if hasattr(img, 'n_frames') and img.n_frames > 1:
+                        frames = [frame.resize((200, 200), resize_method) for frame in ImageSequence.Iterator(img)]
+                        frames[0].save(upscaled_filepath, 'WEBP', save_all=True, append_images=frames[1:], loop=0, quality=85, minimize_size=True)
+                    else:
+                        resized_img = img.resize((200, 200), resize_method)
+                        resized_img.save(upscaled_filepath)
+                    filepath_to_send = upscaled_filepath
+
+            filename = os.path.basename(filepath_to_send)
+            with open(filepath_to_send, 'rb') as f:
                 discord_file = discord.File(f, filename=filename)
 
                 embed = discord.Embed(color=discord.Color.blue())
@@ -526,6 +571,11 @@ class DcconImageView(discord.ui.View):
             # 에러가 발생하면 원래 상호작용에 응답하여 사용자에게 알림
             await interaction.followup.send(f"오류: 파일을 전송하는 중 문제가 발생했습니다: {e}", ephemeral=True)
             return
+        finally:
+            # 확대된 임시 파일이 있다면 삭제
+            if upscaled_filepath and os.path.exists(upscaled_filepath):
+                try: os.remove(upscaled_filepath)
+                except OSError: pass
             
         await interaction.delete_original_response()
         self.stop() # 전송 후 View는 멈추고 파일 정리
@@ -689,17 +739,17 @@ class Dccon(commands.Cog):
         """루프가 시작되기 전에 봇이 준비될 때까지 기다립니다."""
         await self.bot.wait_until_ready()
 
-    def _process_and_convert_image(self, temp_filepath: str, content_type: str) -> (Optional[str], Optional[str]):
+    def _process_and_convert_image(self, temp_filepath: str, content_type: str) -> (Optional[str], Optional[str], Optional[tuple]):
         """
-        다운로드된 이미지 파일을 처리합니다. (동기 함수)
-        APNG인 경우 GIF로 변환하고, 일반 이미지는 확장자를 추가합니다.
-        CPU 집약적인 작업이므로 별도 스레드에서 실행되어야 합니다.
+        다운로드된 이미지 파일을 처리하고 (final_path, error_msg, original_dims)를 반환합니다.
         """
         img = None
         final_filepath = None
+        original_dims = None
         try:
             img = Image.open(temp_filepath)
-            
+            original_dims = (img.width, img.height)
+
             # APNG인 경우, FFmpeg를 사용하여 WebP로 변환 (최고의 호환성 보장)
             if hasattr(img, 'n_frames') and img.n_frames > 1:
                 print(f"✅ APNG 감지됨 ({img.n_frames} 프레임). 'FFmpeg'를 사용한 'Fast Path' 최적화를 시작합니다.")
@@ -768,7 +818,7 @@ class Dccon(commands.Cog):
                     # 생성되었을 수 있는 최종 파일 삭제
                     if os.path.exists(final_filepath):
                         os.remove(final_filepath)
-                    return None, error
+                    return None, error, original_dims
 
             # 일반 이미지인 경우 확장자 추가
             else:
@@ -788,11 +838,11 @@ class Dccon(commands.Cog):
                 error = f"변환된 파일 크기({size_in_mb:.2f}MB)가 너무 큽니다."
                 print(f"--- ❌ {error} ---")
                 os.remove(final_filepath)
-                return None, error
+                return None, error, original_dims
 
             print(f"최종 저장된 파일 경로: {final_filepath}")
             print(f"파일 크기: {final_size} bytes")
-            return final_filepath, None
+            return final_filepath, None, original_dims
 
         except Exception as e:
             error_msg = "이미지 처리 중 오류가 발생했습니다."
@@ -800,7 +850,7 @@ class Dccon(commands.Cog):
             # 변환 실패 시 생성되었을 수 있는 파일 삭제
             if final_filepath and os.path.exists(final_filepath):
                 os.remove(final_filepath)
-            return None, error_msg
+            return None, error_msg, original_dims
         finally:
             if img:
                 img.close()
@@ -809,10 +859,10 @@ class Dccon(commands.Cog):
                 os.remove(temp_filepath)
 
 
-    async def download_image(self, session: aiohttp.ClientSession, url: str) -> (Optional[str], Optional[str]):
+    async def download_image(self, session: aiohttp.ClientSession, url: str) -> (Optional[str], Optional[str], Optional[tuple]):
         """
-        주어진 URL에서 이미지를 비동기적으로 다운로드하고,
-        별도 스레드에서 이미지 처리(변환)를 수행합니다.
+        주어진 URL에서 이미지를 비동기적으로 다운로드하고 처리합니다.
+        반환값: (최종 파일 경로, 에러 메시지, 원본 이미지 크기)
         """
         print(f"\n--- 🖼️ 이미지 다운로드 시작 ---")
         print(f"URL: {url}")
@@ -826,7 +876,7 @@ class Dccon(commands.Cog):
                 if response.status != 200:
                     error = f"다운로드 실패 (상태 코드: {response.status})"
                     print(f"--- ❌ {error} ---")
-                    return None, error
+                    return None, error, None
                 
                 # --- [디버그 로그] 원본 파일 크기 사전 확인 ---
                 content_length = response.content_length
@@ -836,7 +886,7 @@ class Dccon(commands.Cog):
                     if content_length > DISCORD_MAX_FILE_SIZE:
                         error = f"원본 파일 크기({size_in_mb:.2f}MB)가 너무 큽니다."
                         print(f"--- ❌ {error} ---")
-                        return None, error
+                        return None, error, None
                 else:
                     print("  [사전 확인] 서버가 크기 정보를 제공하지 않음. 다운로드 후 확인합니다.")
 
@@ -856,11 +906,11 @@ class Dccon(commands.Cog):
                 error = f"다운로드된 파일 크기({size_in_mb:.2f}MB)가 너무 큽니다."
                 print(f"--- ❌ {error} ---")
                 os.remove(temp_filepath)
-                return None, error
+                return None, error, None
 
             # CPU 집약적인 이미지 처리 작업을 별도 스레드에서 실행
             loop = asyncio.get_running_loop()
-            final_filepath, error_msg = await loop.run_in_executor(
+            final_filepath, error_msg, original_dims = await loop.run_in_executor(
                 None, self._process_and_convert_image, temp_filepath, content_type
             )
 
@@ -869,7 +919,7 @@ class Dccon(commands.Cog):
             else:
                 print(f"--- 🖼️ 이미지 처리 중 실패 ---")
             
-            return final_filepath, error_msg
+            return final_filepath, error_msg, original_dims
 
         except Exception as e:
             error = f"다운로드/처리 중 외부 오류: {e}"
@@ -877,7 +927,7 @@ class Dccon(commands.Cog):
             # 오류 발생 시 다운로드된 임시 파일 정리
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
-            return None, error
+            return None, error, None
 
     @app_commands.command(name="디시콘", description="디시콘을 검색하고 다운로드합니다.")
     @app_commands.describe(keyword="검색할 디시콘의 이름 (예: 만두콘)")
@@ -919,7 +969,7 @@ class Dccon(commands.Cog):
         if search_results and search_results[0].get('thumbnail_url'):
             async with aiohttp.ClientSession() as session:
                 # 썸네일 다운로드는 실패해도 전체 기능에 영향이 없도록 간단히 처리
-                temp_image_path, _ = await self.download_image(session, search_results[0]['thumbnail_url'])
+                temp_image_path, _, _ = await self.download_image(session, search_results[0]['thumbnail_url'])
 
         file = None
         if temp_image_path:
