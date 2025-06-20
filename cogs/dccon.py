@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import requests
 import os
@@ -14,6 +14,7 @@ import shutil
 from PIL import Image, ImageSequence
 import hashlib
 import time
+import io
 
 # 디스코드 파일 용량 제한 (8MB) 보다 약간 작은 값으로 설정 (7.5MB)
 DISCORD_MAX_FILE_SIZE = int(7.5 * 1024 * 1024)
@@ -552,7 +553,7 @@ class DcconSelect(discord.ui.Select):
         self.view.stop()
 
         await interaction.response.edit_message(
-            content="선택한 디시콘의 모든 이미지를 다운로드 및 처리 중입니다... 📦\n(움짤이 많으면 시간이 오래 걸릴 수 있습니다)", 
+            content="디시콘 뷰어를 준비하고 있습니다. 첫 번째 이미지를 불러옵니다... 🖼️", 
             view=None, embed=None, attachments=[]
         )
         
@@ -624,6 +625,48 @@ class Dccon(commands.Cog):
         for dir_path in [self.temp_dir, self.favorites_dir]:
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
+        self.cleanup_task.start()
+
+    def cog_unload(self):
+        self.cleanup_task.cancel()
+
+    @tasks.loop(hours=1.0)
+    async def cleanup_task(self):
+        """주기적으로 오래된 임시 파일을 정리하는 백그라운드 작업입니다."""
+        print("\n--- 🧹 주기적인 임시 파일 정리 시작 ---")
+        now = time.time()
+        # 3시간 이상된 파일들을 삭제 대상으로 설정
+        cleanup_age_seconds = 3 * 60 * 60  
+
+        deleted_count = 0
+        for dir_path in [self.temp_dir, self.favorites_dir]:
+            print(f"[{dir_path}] 폴더를 확인합니다...")
+            try:
+                for filename in os.listdir(dir_path):
+                    file_path = os.path.join(dir_path, filename)
+                    # 파일인지 확인 (하위 폴더는 무시)
+                    if os.path.isfile(file_path):
+                        try:
+                            file_age = now - os.path.getmtime(file_path)
+                            if file_age > cleanup_age_seconds:
+                                os.remove(file_path)
+                                deleted_count += 1
+                                print(f"  - 삭제 (오래됨): {file_path}")
+                        except FileNotFoundError:
+                            # 파일을 확인하고 삭제하는 사이에 다른 로직에 의해 삭제된 경우
+                            continue
+            except Exception as e:
+                print(f"🚨 [{dir_path}] 폴더 정리 중 오류 발생: {e}")
+        
+        if deleted_count > 0:
+            print(f"--- ✅ 주기적인 정리 완료. {deleted_count}개의 오래된 파일을 삭제했습니다. ---")
+        else:
+            print(f"--- ✅ 주기적인 정리 완료. 삭제할 오래된 파일이 없습니다. ---")
+
+    @cleanup_task.before_loop
+    async def before_cleanup_task(self):
+        """루프가 시작되기 전에 봇이 준비될 때까지 기다립니다."""
+        await self.bot.wait_until_ready()
 
     def _process_and_convert_image(self, temp_filepath: str, content_type: str) -> (Optional[str], Optional[str]):
         """
@@ -636,13 +679,75 @@ class Dccon(commands.Cog):
         try:
             img = Image.open(temp_filepath)
             
-            # APNG인 경우 GIF로 변환
+            # APNG인 경우, FFmpeg를 사용하여 WebP로 변환 (최고의 호환성 보장)
             if hasattr(img, 'n_frames') and img.n_frames > 1:
-                print(f"✅ APNG 감지됨 ({img.n_frames} 프레임). GIF로 변환을 시작합니다.")
-                final_filepath = temp_filepath + ".gif"
+                print(f"✅ APNG 감지됨 ({img.n_frames} 프레임). 'FFmpeg'를 사용한 'Fast Path' 최적화를 시작합니다.")
                 
-                img.save(final_filepath, 'GIF', save_all=True, append_images=list(ImageSequence.Iterator(img))[1:], loop=0, disposal=2)
-                print(f"-> GIF 변환 완료: {final_filepath}")
+                # Pillow 라이브러리가 더 이상 필요 없으므로 핸들을 닫음
+                img.close()
+                img = None
+
+                final_filepath = temp_filepath + ".webp"
+                
+                # --- FFmpeg Fast Path / Slow Path 최적화 로직 ---
+                FAST_PATH_QUALITY = 100
+                best_quality = None
+                
+                def run_ffmpeg(quality: int) -> bool:
+                    """주어진 품질로 FFmpeg 변환을 실행하고 성공 여부를 반환합니다."""
+                    command = [
+                        'ffmpeg',
+                        '-y',  # 덮어쓰기 허용
+                        '-i', temp_filepath,
+                        '-c:v', 'libwebp',
+                        '-lossless', '0',
+                        '-quality', str(quality),
+                        '-loop', '0',
+                        '-preset', 'default',
+                        '-an',
+                        '-vsync', '0',
+                        final_filepath
+                    ]
+                    try:
+                        # FFmpeg의 상세 로그는 숨기고, 오류 발생 시에만 표시
+                        result = subprocess.run(command, check=True, capture_output=True, text=True)
+                        return True
+                    except subprocess.CalledProcessError as e:
+                        print(f"--- 🚨 FFmpeg 오류 (quality: {quality}) ---")
+                        print(e.stderr)
+                        return False
+
+                # 1. Fast Path
+                print(f"  - Fast Path: 품질 {FAST_PATH_QUALITY}로 변환 시도...")
+                if run_ffmpeg(FAST_PATH_QUALITY):
+                    file_size = os.path.getsize(final_filepath)
+                    print(f"  - 결과 크기: {file_size / (1024*1024):.2f}MB")
+                    if file_size <= DISCORD_MAX_FILE_SIZE:
+                        best_quality = FAST_PATH_QUALITY
+                
+                # 2. Slow Path
+                if best_quality is None:
+                    print(f"  -> Fast Path 실패. Slow Path (정밀 탐색)를 시작합니다.")
+                    for quality in range(FAST_PATH_QUALITY - 10, 35, -10): # 65, 55, 45
+                        print(f"    - 품질 {quality} 테스트...")
+                        if run_ffmpeg(quality):
+                            file_size = os.path.getsize(final_filepath)
+                            print(f"    - 결과 크기: {file_size / (1024*1024):.2f}MB")
+                            if file_size <= DISCORD_MAX_FILE_SIZE:
+                                best_quality = quality
+                                break
+
+                # 3. 최종 결과 처리
+                if best_quality is not None:
+                    print(f"-> ✅ FFmpeg 변환 완료. 최적 품질: {best_quality}")
+                    # 최종 파일은 이미 final_filepath에 저장되어 있음
+                else:
+                    error = "FFmpeg 변환 실패 또는 가장 낮은 품질로도 파일 크기를 줄일 수 없었습니다."
+                    print(f"--- ❌ {error} ---")
+                    # 생성되었을 수 있는 최종 파일 삭제
+                    if os.path.exists(final_filepath):
+                        os.remove(final_filepath)
+                    return None, error
 
             # 일반 이미지인 경우 확장자 추가
             else:
@@ -696,29 +801,37 @@ class Dccon(commands.Cog):
         try:
             headers = {'Referer': 'https://m.dcinside.com/'}
             async with session.get(url, headers=headers) as response:
+                print(f"응답 상태: {response.status}")
                 if response.status != 200:
                     error = f"다운로드 실패 (상태 코드: {response.status})"
                     print(f"--- ❌ {error} ---")
                     return None, error
                 
-                # 원본 파일 크기 사전 확인
+                # --- [디버그 로그] 원본 파일 크기 사전 확인 ---
                 content_length = response.content_length
-                if content_length and content_length > DISCORD_MAX_FILE_SIZE:
+                if content_length:
                     size_in_mb = content_length / (1024 * 1024)
-                    error = f"원본 파일 크기({size_in_mb:.2f}MB)가 너무 큽니다."
-                    print(f"--- ❌ {error} ---")
-                    return None, error
+                    print(f"  [사전 확인] 서버가 알려준 크기: {size_in_mb:.2f}MB")
+                    if content_length > DISCORD_MAX_FILE_SIZE:
+                        error = f"원본 파일 크기({size_in_mb:.2f}MB)가 너무 큽니다."
+                        print(f"--- ❌ {error} ---")
+                        return None, error
+                else:
+                    print("  [사전 확인] 서버가 크기 정보를 제공하지 않음. 다운로드 후 확인합니다.")
 
                 content_type = response.content_type
-                print(f"응답 상태: {response.status}, Content-Type: {content_type}")
+                print(f"  > Content-Type: {content_type}")
+                print(f"  > 다운로드 시작...")
 
                 with open(temp_filepath, 'wb') as f:
                     f.write(await response.read())
+                print(f"  > 다운로드 완료.")
             
             # 다운로드 후 파일 크기 재확인 (헤더가 없는 경우 대비)
             downloaded_size = os.path.getsize(temp_filepath)
+            size_in_mb = downloaded_size / (1024 * 1024)
+            print(f"  [사후 확인] 다운로드된 실제 크기: {size_in_mb:.2f}MB")
             if downloaded_size > DISCORD_MAX_FILE_SIZE:
-                size_in_mb = downloaded_size / (1024 * 1024)
                 error = f"다운로드된 파일 크기({size_in_mb:.2f}MB)가 너무 큽니다."
                 print(f"--- ❌ {error} ---")
                 os.remove(temp_filepath)
