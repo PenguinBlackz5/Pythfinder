@@ -235,14 +235,15 @@ class DcconScraper:
 
 # --- 즐겨찾기 뷰 ---
 class FavoriteDcconView(discord.ui.View):
-    """즐겨찾기한 디시콘을 보여주는 View"""
+    """즐겨찾기한 디시콘을 보여주는 View (실시간 다운로드 방식)"""
     def __init__(self, cog: 'Dccon', favorites: List[Dict[str, Any]], author: discord.User):
         super().__init__(timeout=300)
         self.cog = cog
-        self.favorites = favorites
+        self.favorites = favorites # 이제 {'dccon_title', 'image_url'}의 리스트
         self.author = author
         self.current_page = 0
         self.message: Optional[discord.WebhookMessage] = None
+        self.current_temp_file_path: Optional[str] = None
         self.update_buttons()
 
     def create_embed(self) -> discord.Embed:
@@ -256,64 +257,97 @@ class FavoriteDcconView(discord.ui.View):
         return embed
 
     def update_buttons(self):
+        is_empty = not self.favorites
+        
         prev_button = discord.utils.get(self.children, custom_id="fav_prev")
         next_button = discord.utils.get(self.children, custom_id="fav_next")
-        if prev_button: prev_button.disabled = self.current_page == 0
-        if next_button: next_button.disabled = self.current_page >= len(self.favorites) - 1
+        send_button = discord.utils.get(self.children, custom_id="fav_send")
+        delete_button = discord.utils.get(self.children, custom_id="fav_delete")
+
+        if prev_button: prev_button.disabled = self.current_page == 0 or is_empty
+        if next_button: next_button.disabled = self.current_page >= len(self.favorites) - 1 or is_empty
+        if send_button: send_button.disabled = is_empty
+        if delete_button: delete_button.disabled = is_empty
+
+    async def _cleanup_file(self):
+        if self.current_temp_file_path and os.path.exists(self.current_temp_file_path):
+            try:
+                os.remove(self.current_temp_file_path)
+            except OSError: pass
+        self.current_temp_file_path = None
 
     async def show_current_page(self, interaction: discord.Interaction):
+        await self._cleanup_file()
+
         if not self.favorites:
-            await interaction.response.edit_message(content="즐겨찾기 목록이 비었습니다.", view=None, embed=None, attachments=[])
+            self.update_buttons()
+            await interaction.response.edit_message(content="즐겨찾기 목록이 비었습니다.", view=self, embed=None, attachments=[])
             return
 
         self.update_buttons()
+        
         fav = self.favorites[self.current_page]
-        filepath = fav['local_path']
-        filename = os.path.basename(filepath)
+        image_url = fav['image_url']
+        
+        async with aiohttp.ClientSession() as session:
+            path, error = await self.cog.download_image(session, image_url)
+        
+        if error:
+            await interaction.response.edit_message(content=f"오류: 이미지를 불러올 수 없습니다.\n> {error}", view=self, embed=None, attachments=[])
+            return
+
+        self.current_temp_file_path = path
+        filename = os.path.basename(path)
         embed = self.create_embed()
         embed.set_image(url=f"attachment://{filename}")
 
         try:
-            with open(filepath, 'rb') as f:
+            with open(path, 'rb') as f:
                 file = discord.File(f, filename=filename)
                 if interaction.response.is_done():
                     await interaction.edit_original_response(embed=embed, view=self, attachments=[file])
                 else:
+                    # 최초 호출 시에는 is_done()이 False일 수 있음
                     await interaction.response.edit_message(embed=embed, view=self, attachments=[file])
         except FileNotFoundError:
-            await interaction.response.edit_message(content=f"오류: '{filepath}' 파일을 찾을 수 없습니다. 즐겨찾기에서 삭제합니다.", view=None, embed=None, attachments=[])
-            await remove_dccon_favorite(self.author.id, fav['image_url'])
-            self.favorites.pop(self.current_page)
-            if self.current_page >= len(self.favorites) and self.favorites:
-                self.current_page -= 1
-            await self.show_current_page(interaction) # Refresh view
+            await interaction.edit_original_response(content=f"오류: 임시 파일을 찾을 수 없습니다.", view=self, embed=None, attachments=[])
+
 
     @discord.ui.button(label="◀", style=discord.ButtonStyle.grey, custom_id="fav_prev")
     async def prev_button(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.defer()
         self.current_page -= 1
         await self.show_current_page(i)
 
     @discord.ui.button(label="✅ 보내기", style=discord.ButtonStyle.success, custom_id="fav_send")
     async def send_button(self, i: discord.Interaction, b: discord.ui.Button):
         await i.response.defer()
-        filepath = self.favorites[self.current_page]['local_path']
+        if not self.current_temp_file_path:
+            await i.followup.send("전송할 파일이 없습니다.", ephemeral=True)
+            return
+            
         try:
-            with open(filepath, 'rb') as f:
-                file = discord.File(f, filename=os.path.basename(filepath))
+            with open(self.current_temp_file_path, 'rb') as f:
+                file = discord.File(f, filename=os.path.basename(self.current_temp_file_path))
                 await i.channel.send(content=f"{i.user.mention}:", file=file)
-                await i.edit_original_response(content="✅ 전송했습니다.", view=None, embed=None, attachments=[])
+                await i.delete_original_response()
         except Exception as e:
-            await i.edit_original_response(content=f"오류: {e}", view=None, embed=None, attachments=[])
+            await i.followup.send(f"오류: {e}", ephemeral=True)
+        
         self.stop()
+        await self._cleanup_file()
+
 
     @discord.ui.button(label="💔 삭제", style=discord.ButtonStyle.danger, custom_id="fav_delete")
     async def delete_button(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.defer()
         fav_to_delete = self.favorites[self.current_page]
-        deleted_path = await remove_dccon_favorite(self.author.id, fav_to_delete['image_url'])
+        
+        success = await remove_dccon_favorite(self.author.id, fav_to_delete['image_url'])
 
-        if deleted_path and os.path.exists(deleted_path):
-            os.remove(deleted_path)
-            print(f"[✅] 즐겨찾기 파일 삭제: {deleted_path}")
+        if not success:
+            await i.followup.send("즐겨찾기 삭제에 실패했습니다 (DB 오류).", ephemeral=True)
+            return
 
         self.favorites.pop(self.current_page)
         if self.current_page >= len(self.favorites) and self.favorites:
@@ -323,32 +357,44 @@ class FavoriteDcconView(discord.ui.View):
 
     @discord.ui.button(label="▶", style=discord.ButtonStyle.grey, custom_id="fav_next")
     async def next_button(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.defer()
         self.current_page += 1
         await self.show_current_page(i)
 
+    async def on_timeout(self):
+        await self._cleanup_file()
+        if self.message:
+            try:
+                await self.message.edit(content="시간이 만료되었습니다.", view=None, embed=None, attachments=[])
+            except discord.NotFound:
+                pass
+        self.stop()
+
 
 class DcconImageView(discord.ui.View):
-    """디시콘 이미지를 넘겨보는 View (로컬 파일 기반)"""
-    def __init__(self, cog: 'Dccon', title: str, processed_images: List[Dict[str, Any]], author: discord.User):
+    """디시콘 이미지를 실시간으로 다운로드하여 보여주는 View"""
+    def __init__(self, cog: 'Dccon', title: str, image_urls: List[str], author: discord.User):
         super().__init__(timeout=300)
         self.cog = cog
         self.title = title
-        self.processed_images = processed_images # {'url', 'path', 'error'}
-        self.displayable_images = [img for img in self.processed_images if not img.get('error')]
+        self.image_urls = image_urls
         self.author = author
         self.current_page = 0
         self.message: Optional[discord.WebhookMessage] = None
+        self.current_temp_file_path: Optional[str] = None
+        self.current_error: Optional[str] = None
         self.update_buttons()
 
     def create_embed(self) -> discord.Embed:
         """현재 페이지에 맞는 임베드를 생성합니다."""
-        current_image = self.displayable_images[self.current_page]
-
         embed = discord.Embed(
             title=f"디시콘: {self.title}",
-            description=f"페이지: {self.current_page + 1}/{len(self.displayable_images)}",
-            color=discord.Color.blue()
+            description=f"페이지: {self.current_page + 1}/{len(self.image_urls)}",
+            color=discord.Color.red() if self.current_error else discord.Color.blue()
         )
+
+        if self.current_error:
+            embed.add_field(name="⚠️ 이미지 로드 오류", value=self.current_error, inline=False)
 
         embed.set_footer(text=f"요청자: {self.author.display_name}")
         return embed
@@ -360,76 +406,81 @@ class DcconImageView(discord.ui.View):
         favorite_button = discord.utils.get(self.children, custom_id="favorite_dccon")
         select_button = discord.utils.get(self.children, custom_id="select_dccon")
         
-        # 이전/다음 버튼 상태 업데이트
         if prev_button: prev_button.disabled = self.current_page == 0
-        if next_button: next_button.disabled = self.current_page >= len(self.displayable_images) - 1
+        if next_button: next_button.disabled = self.current_page >= len(self.image_urls) - 1
 
-        is_empty = not self.displayable_images
+        is_errored = self.current_error is not None
+        if favorite_button: favorite_button.disabled = is_errored
+        if select_button: select_button.disabled = is_errored
+
+    async def _cleanup_previous_file(self):
+        """이전 임시 파일을 삭제합니다."""
+        if self.current_temp_file_path and os.path.exists(self.current_temp_file_path):
+            try:
+                os.remove(self.current_temp_file_path)
+            except OSError as e:
+                print(f"🚨 임시 파일 삭제 실패: {e}")
+        self.current_temp_file_path = None
+        self.current_error = None
         
-        # 이미지가 없으면 즐겨찾기/보내기 비활성화
-        if favorite_button: favorite_button.disabled = is_empty
-        if select_button: select_button.disabled = is_empty
+    async def show_page(self, interaction: discord.Interaction, is_initial: bool = False):
+        """
+        요청된 페이지의 디시콘을 실시간으로 다운로드하고 표시합니다.
+        is_initial 플래그는 처음 View가 생성될 때를 위함입니다.
+        """
+        # 이전 파일 정리
+        await self._cleanup_previous_file()
 
+        # 현재 페이지 URL 가져오기
+        current_url = self.image_urls[self.current_page]
 
-    async def handle_interaction(self, interaction: discord.Interaction):
-        """버튼 상호작용을 처리하고, 새 이미지 파일을 첨부하여 메시지를 수정합니다."""
-        if interaction.user.id != self.author.id:
-            await interaction.response.send_message("명령어를 실행한 사용자만 조작할 수 있습니다.", ephemeral=True)
-            return
+        # 이미지 다운로드 및 처리
+        async with aiohttp.ClientSession() as session:
+            path, error = await self.cog.download_image(session, current_url)
         
+        self.current_temp_file_path = path
+        self.current_error = error
+        
+        # UI 업데이트 (버튼, 임베드)
         self.update_buttons()
-        
-        current_image = self.displayable_images[self.current_page]
-        filepath = current_image.get('path')
-        
         embed = self.create_embed()
         attachments = []
         
-        if filepath and os.path.exists(filepath):
-            filename = os.path.basename(filepath)
+        if self.current_temp_file_path:
+            filename = os.path.basename(self.current_temp_file_path)
             embed.set_image(url=f"attachment://{filename}")
-            attachments.append(discord.File(filepath, filename=filename))
-        
-        try:
-            # defer()는 버튼 콜백에서 호출되므로, 여기서는 original_response를 수정합니다.
+            attachments.append(discord.File(self.current_temp_file_path, filename=filename))
+
+        # 메시지 수정 또는 새로 전송
+        content = f"**{self.title}** 디시콘을 표시합니다. (총 {len(self.image_urls)}개)"
+        if is_initial:
+            await interaction.edit_original_response(content=content, embed=embed, view=self, attachments=attachments)
+            self.message = await interaction.original_response()
+        else:
             await interaction.edit_original_response(embed=embed, view=self, attachments=attachments)
-        except discord.NotFound:
-            print("[⚠️] 사용자가 원본 메시지를 삭제하여 상호작용에 응답할 수 없습니다.")
-            self.stop()
-            await self.cleanup_files()
 
     @discord.ui.button(label="◀ 이전", style=discord.ButtonStyle.grey, custom_id="prev_page")
     async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         if self.current_page > 0:
             self.current_page -= 1
-        await self.handle_interaction(interaction)
+            await self.show_page(interaction)
 
     @discord.ui.button(label="⭐ 즐겨찾기", style=discord.ButtonStyle.primary, custom_id="favorite_dccon")
     async def favorite_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_image = self.displayable_images[self.current_page]
-        current_image_url = current_image['url']
+        current_image_url = self.image_urls[self.current_page]
         
         if await is_dccon_favorited(self.author.id, current_image_url):
             await interaction.response.send_message("이미 즐겨찾기에 추가된 디시콘입니다.", ephemeral=True)
             return
 
-        temp_path = current_image['path']
-        if not temp_path: # 혹시 모를 상황 대비
-             await interaction.response.send_message("즐겨찾기할 파일 경로가 없습니다.", ephemeral=True)
-             return
-
-        filename = os.path.basename(temp_path)
-        permanent_path = os.path.join(self.cog.favorites_dir, filename)
-
         try:
-            shutil.copy(temp_path, permanent_path)
-            success = await add_dccon_favorite(self.author.id, self.title, current_image_url, permanent_path)
+            # 이제 파일을 복사하지 않고 DB에 URL만 저장
+            success = await add_dccon_favorite(self.author.id, self.title, current_image_url)
             if success:
                 await interaction.response.send_message("✅ 즐겨찾기에 추가했습니다!", ephemeral=True)
-                print(f"[✅] 즐겨찾기 저장: {self.author.id} -> {permanent_path}")
+                print(f"[✅] 즐겨찾기 저장 (URL): {self.author.id} -> {current_image_url}")
             else:
-                os.remove(permanent_path) # DB 저장 실패시 파일도 삭제
                 await interaction.response.send_message("즐겨찾기 추가에 실패했습니다. (DB 오류)", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"즐겨찾기 추가 중 오류 발생: {e}", ephemeral=True)
@@ -439,14 +490,13 @@ class DcconImageView(discord.ui.View):
         """현재 디시콘을 채널에 전송합니다."""
         await interaction.response.defer()
 
-        filepath = self.displayable_images[self.current_page].get('path')
-        if not filepath:
+        if not self.current_temp_file_path:
              await interaction.followup.send("전송할 파일이 없습니다.", ephemeral=True)
              return
 
         try:
-            with open(filepath, 'rb') as f:
-                discord_file = discord.File(f, filename=os.path.basename(filepath))
+            with open(self.current_temp_file_path, 'rb') as f:
+                discord_file = discord.File(f, filename=os.path.basename(self.current_temp_file_path))
                 await interaction.channel.send(content=f"{interaction.user.mention}:", file=discord_file)
         except FileNotFoundError:
             await interaction.followup.send("오류: 이미지 파일을 찾을 수 없습니다. 다시 시도해주세요.", ephemeral=True)
@@ -456,33 +506,19 @@ class DcconImageView(discord.ui.View):
             return
             
         await interaction.delete_original_response()
-        
-        print("\n[✅] 디시콘 전송 완료. 임시 파일 정리를 시작합니다...")
-        self.stop()
-        await self.cleanup_files()
+        self.stop() # 전송 후 View는 멈추고 파일 정리
+        await self._cleanup_previous_file()
 
     @discord.ui.button(label="다음 ▶", style=discord.ButtonStyle.grey, custom_id="next_page")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        if self.current_page < len(self.displayable_images) - 1:
+        if self.current_page < len(self.image_urls) - 1:
             self.current_page += 1
-        await self.handle_interaction(interaction)
+            await self.show_page(interaction)
         
     async def cleanup_files(self):
         """View와 관련된 모든 임시 파일을 삭제합니다."""
-        if not self.processed_images:
-            return
-        
-        paths_to_delete = [img['path'] for img in self.processed_images if img.get('path')]
-        print(f"\n[ℹ️] DcconImageView 파일 정리. {len(paths_to_delete)}개 파일 삭제 시작...")
-        for path in paths_to_delete:
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                    print(f"  - 삭제: {path}")
-                except Exception as e:
-                    print(f"  - 🚨 파일 삭제 실패: {path}, 오류: {e}")
-        self.processed_images.clear()
+        await self._cleanup_previous_file()
 
     async def on_timeout(self):
         """타임아웃 시 버튼을 비활성화하고 임시 파일을 삭제합니다."""
@@ -539,26 +575,21 @@ class DcconSelect(discord.ui.Select):
                  await interaction.edit_original_response(content="알 수 없는 이유로 디시콘 상세 정보를 가져오지 못했습니다. (이미지 목록 없음)")
                  return
 
-            processed_images = []
-            async with aiohttp.ClientSession() as session:
-                tasks = [self.cog.download_image(session, url) for url in details['images']]
-                download_results = await asyncio.gather(*tasks) # List of (path, error)
+            image_urls = details['images']
+            title = details['info']['title']
 
-                for i, result in enumerate(download_results):
-                    path, error = result
-                    processed_images.append({
-                        "url": details['images'][i],
-                        "path": path,
-                        "error": error
-                    })
-
-            successful_images = [img for img in processed_images if img['path']]
-            if not successful_images:
-                failed_reasons = [img['error'] for img in processed_images if img['error']]
-                # 모든 에러 메시지를 하나로 합치되, 너무 길지 않게 조절
-                error_summary = "\n".join(list(set(failed_reasons))[:5]) # 중복 제거 후 최대 5개
-                await interaction.edit_original_response(content=f"모든 이미지 처리 중 오류가 발생했습니다. 😥\n**주요 원인:**\n```\n{error_summary}\n```")
+            if not image_urls:
+                await interaction.edit_original_response(content="이 디시콘에는 이미지가 없습니다.")
                 return
+
+            # View를 생성하고, 첫 페이지를 로드 및 전송하는 과정을 View에 위임합니다.
+            image_view = DcconImageView(
+                cog=self.cog,
+                title=title,
+                image_urls=image_urls,
+                author=interaction.user
+            )
+            await image_view.show_page(interaction, is_initial=True)
         
         except Exception as e:
             # traceback을 사용하여 더 상세한 에러 정보 로깅
@@ -570,50 +601,6 @@ class DcconSelect(discord.ui.Select):
                 view=None, embed=None, attachments=[]
             )
             return
-
-        image_view = DcconImageView(
-            cog=self.cog,
-            title=details['info']['title'],
-            processed_images=processed_images,
-            author=interaction.user
-        )
-        
-        if not image_view.displayable_images:
-            failed_reasons = [img['error'] for img in processed_images if img['error']]
-            error_summary = "\n".join(list(set(failed_reasons))[:5])
-            await interaction.edit_original_response(content=f"모든 이미지 처리 중 오류가 발생하여 표시할 디시콘이 없습니다. 😥\n**주요 원인:**\n```\n{error_summary}\n```")
-            # 모든 임시 파일 정리
-            paths_to_delete = [img['path'] for img in processed_images if img.get('path')]
-            for path in paths_to_delete:
-                if os.path.exists(path):
-                    try:
-                        os.remove(path)
-                    except OSError:
-                        pass
-            return
-
-        # 표시할 첫 번째 유효한 이미지를 찾음
-        first_valid_image = image_view.displayable_images[0]
-        first_image_path = first_valid_image['path']
-        
-        file = discord.File(first_image_path, filename=os.path.basename(first_image_path))
-        embed = image_view.create_embed()
-        embed.set_image(url=f"attachment://{os.path.basename(first_image_path)}")
-        
-        total_count = len(processed_images)
-        success_count = len(image_view.displayable_images)
-        
-        message_content = f"**{details['info']['title']}** 디시콘을 표시합니다. (총 {total_count}개 중 {success_count}개 성공)"
-        if total_count != success_count:
-            message_content += "\n(일부 이미지는 크기 제한 등으로 인해 표시되지 않을 수 있습니다)"
-
-        await interaction.edit_original_response(
-            content=message_content,
-            embed=embed,
-            view=image_view,
-            attachments=[file]
-        )
-        image_view.message = await interaction.original_response()
 
 class DcconSelectView(discord.ui.View):
     """DcconSelect를 담는 View"""
@@ -824,20 +811,9 @@ class Dccon(commands.Cog):
 
         view = FavoriteDcconView(self, favorites, interaction.user)
         
-        # 첫 번째 즐겨찾기 표시
-        first_fav = favorites[0]
-        filepath = first_fav['local_path']
-        filename = os.path.basename(filepath)
-        
-        try:
-            with open(filepath, 'rb') as f:
-                file = discord.File(f, filename=filename)
-                embed = view.create_embed()
-                embed.set_image(url=f"attachment://{filename}")
-                message = await interaction.followup.send(embed=embed, view=view, file=file, ephemeral=True)
-                view.message = message
-        except FileNotFoundError:
-            await interaction.followup.send(f"오류: 즐겨찾기 파일을 찾을 수 없습니다. ({filepath})", ephemeral=True)
+        # 첫 번째 즐겨찾기 표시 (View가 알아서 다운로드 및 표시)
+        await view.show_current_page(interaction)
+        view.message = await interaction.original_response()
 
 
 async def setup(bot: commands.Bot):
