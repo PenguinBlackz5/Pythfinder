@@ -32,3 +32,12 @@ game/__pycache__/game_manager.cpython-312.pyc
 game/__pycache__/models.cpython-312.pyc
 game/__pycache__/player.cpython-312.pyc
 game/__pycache__/renderer.cpython-312.pyc
+appid_generator/build.gradle.kts
+appid_generator/.gradle/file-system.probe
+appid_generator/.gradle/8.3/executionHistory/executionHistory.bin
+appid_generator/.gradle/8.3/executionHistory/executionHistory.lock
+appid_generator/.gradle/8.3/fileHashes/fileHashes.bin
+appid_generator/.gradle/8.3/fileHashes/fileHashes.lock
+appid_generator/.gradle/buildOutputCleanup/buildOutputCleanup.lock
+appid_generator/.gradle/buildOutputCleanup/outputFiles.bin
+appid_generator/build/tmp/fatJar/MANIFEST.MF

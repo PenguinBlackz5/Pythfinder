@@ -25,11 +25,15 @@ application {
     mainClass.set("MainKt")
 }
 
-tasks.withType<Jar> {
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+
     manifest {
         attributes["Main-Class"] = "MainKt"
     }
+    
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
     from(sourceSets.main.get().output)
     dependsOn(configurations.runtimeClasspath)
     from({

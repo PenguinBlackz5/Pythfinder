@@ -184,7 +184,7 @@ class DcconScraper:
         return results
 
     def get_details(self, package_idx: str) -> (Optional[Dict[str, Any]], Optional[str]):
-        """패키지 ID로 디시콘 상세 정보(정보, 이미지 URL 목록)를 가져옵니다. (details, error_message) 튜플을 반환합니다."""
+        """패키지 ID로 디시콘 상세 정보(정보, 이미지 URL 및 캡션 목록)를 가져옵니다."""
         if not self.csrf_token:
             error = "❌ CSRF 토큰이 없습니다. search()를 먼저 호출해야 합니다."
             print(error)
@@ -215,13 +215,19 @@ class DcconScraper:
             main_img_tag = soup.select_one('div.dccon-caption-box div.thum-img > img')
             info['main_img_url'] = main_img_tag['src'] if main_img_tag else None
 
-            image_urls = [img['src'] for img in soup.select('ul.dccon-img-lst img') if img.has_attr('src')]
+            images_data = []
+            for img_tag in soup.select('ul.dccon-img-lst img'):
+                if img_tag.has_attr('src'):
+                    images_data.append({
+                        "url": img_tag['src'],
+                        "caption": img_tag.get('alt', '').strip()  # alt 속성을 캡션으로 사용
+                    })
             
-            if not image_urls: 
-                error = "❌ 상세 정보 HTML 파싱 후 이미지 URL 목록을 찾지 못했습니다."
+            if not images_data: 
+                error = "❌ 상세 정보 HTML 파싱 후 이미지 목록을 찾지 못했습니다."
                 print(error)
                 return None, error
-            return {'info': info, 'images': image_urls}, None
+            return {'info': info, 'images': images_data}, None
 
         except requests.exceptions.RequestException as e:
             error = f"❌ 상세 정보 요청 중 네트워크 오류 발생: {e}"
@@ -328,16 +334,23 @@ class FavoriteDcconView(discord.ui.View):
             return
             
         try:
+            current_fav = self.favorites[self.current_page]
+            title = current_fav['dccon_title']
+            filename = os.path.basename(self.current_temp_file_path)
             with open(self.current_temp_file_path, 'rb') as f:
-                file = discord.File(f, filename=os.path.basename(self.current_temp_file_path))
-                await i.channel.send(content=f"{i.user.mention}:", file=file)
+                file = discord.File(f, filename=filename)
+                
+                embed = discord.Embed(color=discord.Color.gold())
+                embed.set_author(name=i.user.display_name, icon_url=i.user.display_avatar.url)
+                embed.set_image(url=f"attachment://{filename}")
+                embed.set_footer(text=f"{title}")
+
+                await i.channel.send(file=file, embed=embed)
                 await i.delete_original_response()
         except Exception as e:
             await i.followup.send(f"오류: {e}", ephemeral=True)
         
         self.stop()
-        await self._cleanup_file()
-
 
     @discord.ui.button(label="💔 삭제", style=discord.ButtonStyle.danger, custom_id="fav_delete")
     async def delete_button(self, i: discord.Interaction, b: discord.ui.Button):
@@ -374,11 +387,11 @@ class FavoriteDcconView(discord.ui.View):
 
 class DcconImageView(discord.ui.View):
     """디시콘 이미지를 실시간으로 다운로드하여 보여주는 View"""
-    def __init__(self, cog: 'Dccon', title: str, image_urls: List[str], author: discord.User):
+    def __init__(self, cog: 'Dccon', title: str, images_data: List[Dict[str, str]], author: discord.User):
         super().__init__(timeout=300)
         self.cog = cog
         self.title = title
-        self.image_urls = image_urls
+        self.images_data = images_data
         self.author = author
         self.current_page = 0
         self.message: Optional[discord.WebhookMessage] = None
@@ -388,16 +401,19 @@ class DcconImageView(discord.ui.View):
 
     def create_embed(self) -> discord.Embed:
         """현재 페이지에 맞는 임베드를 생성합니다."""
+        current_image_data = self.images_data[self.current_page]
+        caption = current_image_data.get('caption', '캡션 없음')
+
         embed = discord.Embed(
-            title=f"디시콘: {self.title}",
-            description=f"페이지: {self.current_page + 1}/{len(self.image_urls)}",
+            title=f"{self.title}",
+            description=f"{caption}",
             color=discord.Color.red() if self.current_error else discord.Color.blue()
         )
 
         if self.current_error:
             embed.add_field(name="⚠️ 이미지 로드 오류", value=self.current_error, inline=False)
 
-        embed.set_footer(text=f"요청자: {self.author.display_name}")
+        embed.set_footer(text=f"페이지: {self.current_page + 1}/{len(self.images_data)} | 요청자: {self.author.display_name}")
         return embed
 
     def update_buttons(self):
@@ -408,7 +424,7 @@ class DcconImageView(discord.ui.View):
         select_button = discord.utils.get(self.children, custom_id="select_dccon")
         
         if prev_button: prev_button.disabled = self.current_page == 0
-        if next_button: next_button.disabled = self.current_page >= len(self.image_urls) - 1
+        if next_button: next_button.disabled = self.current_page >= len(self.images_data) - 1
 
         is_errored = self.current_error is not None
         if favorite_button: favorite_button.disabled = is_errored
@@ -433,7 +449,7 @@ class DcconImageView(discord.ui.View):
         await self._cleanup_previous_file()
 
         # 현재 페이지 URL 가져오기
-        current_url = self.image_urls[self.current_page]
+        current_url = self.images_data[self.current_page]['url']
 
         # 이미지 다운로드 및 처리
         async with aiohttp.ClientSession() as session:
@@ -453,7 +469,7 @@ class DcconImageView(discord.ui.View):
             attachments.append(discord.File(self.current_temp_file_path, filename=filename))
 
         # 메시지 수정 또는 새로 전송
-        content = f"**{self.title}** 디시콘을 표시합니다. (총 {len(self.image_urls)}개)"
+        content = "" # 이제 캡션이 임베드에 있으므로 별도 content는 필요 없음
         if is_initial:
             await interaction.edit_original_response(content=content, embed=embed, view=self, attachments=attachments)
             self.message = await interaction.original_response()
@@ -469,7 +485,7 @@ class DcconImageView(discord.ui.View):
 
     @discord.ui.button(label="⭐ 즐겨찾기", style=discord.ButtonStyle.primary, custom_id="favorite_dccon")
     async def favorite_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_image_url = self.image_urls[self.current_page]
+        current_image_url = self.images_data[self.current_page]['url']
         
         if await is_dccon_favorited(self.author.id, current_image_url):
             await interaction.response.send_message("이미 즐겨찾기에 추가된 디시콘입니다.", ephemeral=True)
@@ -496,13 +512,18 @@ class DcconImageView(discord.ui.View):
              return
 
         try:
+            filename = os.path.basename(self.current_temp_file_path)
             with open(self.current_temp_file_path, 'rb') as f:
-                discord_file = discord.File(f, filename=os.path.basename(self.current_temp_file_path))
-                await interaction.channel.send(content=f"{interaction.user.mention}:", file=discord_file)
-        except FileNotFoundError:
-            await interaction.followup.send("오류: 이미지 파일을 찾을 수 없습니다. 다시 시도해주세요.", ephemeral=True)
-            return
+                discord_file = discord.File(f, filename=filename)
+
+                embed = discord.Embed(color=discord.Color.blue())
+                embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+                embed.set_image(url=f"attachment://{filename}")
+                embed.set_footer(text=f"{self.title}")
+
+                await interaction.channel.send(file=discord_file, embed=embed)
         except Exception as e:
+            # 에러가 발생하면 원래 상호작용에 응답하여 사용자에게 알림
             await interaction.followup.send(f"오류: 파일을 전송하는 중 문제가 발생했습니다: {e}", ephemeral=True)
             return
             
@@ -513,7 +534,7 @@ class DcconImageView(discord.ui.View):
     @discord.ui.button(label="다음 ▶", style=discord.ButtonStyle.grey, custom_id="next_page")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        if self.current_page < len(self.image_urls) - 1:
+        if self.current_page < len(self.images_data) - 1:
             self.current_page += 1
             await self.show_page(interaction)
         
@@ -576,10 +597,10 @@ class DcconSelect(discord.ui.Select):
                  await interaction.edit_original_response(content="알 수 없는 이유로 디시콘 상세 정보를 가져오지 못했습니다. (이미지 목록 없음)")
                  return
 
-            image_urls = details['images']
+            images_data = details['images']
             title = details['info']['title']
 
-            if not image_urls:
+            if not images_data:
                 await interaction.edit_original_response(content="이 디시콘에는 이미지가 없습니다.")
                 return
 
@@ -587,7 +608,7 @@ class DcconSelect(discord.ui.Select):
             image_view = DcconImageView(
                 cog=self.cog,
                 title=title,
-                image_urls=image_urls,
+                images_data=images_data,
                 author=interaction.user
             )
             await image_view.show_page(interaction, is_initial=True)
