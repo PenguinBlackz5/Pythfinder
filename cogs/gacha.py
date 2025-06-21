@@ -9,16 +9,16 @@ from database_manager import execute_query
 GACHA_CHARACTERS = {
     3: [  # 3성
         {
-            "name": "메스가키 메랑",
-            "image_url": "https://example.com/3star1.png",
-            "description": "(자료없음)"
+            "name": "헬창 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5RxoGbwAMDCCA?format=png",
+            "description": "봐주지 않는다"
         },
         # 3성 캐릭터를 여기에 추가하세요.
     ],
     2: [  # 2성
         {
             "name": "텟카이 메랑",
-            "image_url": "https://img.piku.co.kr/w/uploads/76nyHm/6bf7f3b0b59b4472f2a9730ceeb38c28.jpg",
+            "image_url": "https://pbs.twimg.com/media/Gt5TPoFWEAA1PPE?format=png",
             "description": "철 괴"
         },
         # 2성 캐릭터를 여기에 추가하세요.
@@ -26,8 +26,8 @@ GACHA_CHARACTERS = {
     1: [  # 1성
         {
             "name": "메랑",
-            "image_url": "https://img.piku.co.kr/w/uploads/76nyHm/7c5f1e89a190bf626a9db1613f9de512.jpg",
-            "description": "평범한 메랑."
+            "image_url": "https://pbs.twimg.com/media/Gt5Tz5tXMAAxmft?format=png",
+            "description": "그냥 메랑"
         },
         # 1성 캐릭터를 여기에 추가하세요.
     ]
