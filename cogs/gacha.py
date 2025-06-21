@@ -48,23 +48,27 @@ GACHA_EFFECTS = {
     1: ("조용한 바람이 분다...", 1),
 }
 
-class GachaCollectionView(discord.ui.View):
+class GachaCollectionDropdown(discord.ui.View):
     def __init__(self, characters, user_id):
         super().__init__(timeout=120)
         self.characters = characters
         self.user_id = user_id
-        for idx, char in enumerate(characters):
-            label = f"{char['character_name']} ({'★'*char['star']}) x{char['quantity']}"
-            self.add_item(GachaCharacterButton(label, idx))
+        self.add_item(GachaCharacterSelect(characters))
 
-class GachaCharacterButton(discord.ui.Button):
-    def __init__(self, label, idx):
-        super().__init__(label=label, style=discord.ButtonStyle.primary)
-        self.idx = idx
+class GachaCharacterSelect(discord.ui.Select):
+    def __init__(self, characters):
+        options = [
+            discord.SelectOption(
+                label=f"{char['character_name']} ({'★'*char['star']}) x{char['quantity']}",
+                value=str(idx)
+            ) for idx, char in enumerate(characters)
+        ]
+        super().__init__(placeholder="캐릭터를 선택하세요", min_values=1, max_values=1, options=options)
+        self.characters = characters
 
     async def callback(self, interaction: discord.Interaction):
-        view: GachaCollectionView = self.view
-        char = view.characters[self.idx]
+        idx = int(self.values[0])
+        char = self.characters[idx]
         embed = discord.Embed(
             title=f"{'★'*char['star']} {char['character_name']}",
             description=f"보유 수량: {char['quantity']}",
@@ -72,23 +76,23 @@ class GachaCharacterButton(discord.ui.Button):
         )
         embed.set_image(url=char['image_url'])
         embed.set_footer(text="아래 버튼으로 목록으로 돌아갈 수 있습니다.")
-        back_view = GachaBackToListView(view.characters, view.user_id)
+        back_view = GachaBackToListViewDropdown(self.characters, interaction.user.id)
         await interaction.response.edit_message(embed=embed, view=back_view)
 
-class GachaBackToListView(discord.ui.View):
+class GachaBackToListViewDropdown(discord.ui.View):
     def __init__(self, characters, user_id):
         super().__init__(timeout=120)
         self.characters = characters
         self.user_id = user_id
-        self.add_item(GachaBackButton())
+        self.add_item(GachaBackButtonDropdown())
 
-class GachaBackButton(discord.ui.Button):
+class GachaBackButtonDropdown(discord.ui.Button):
     def __init__(self):
         super().__init__(label="목록으로", style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
-        view: GachaBackToListView = self.view
-        collection_view = GachaCollectionView(view.characters, view.user_id)
+        view: GachaBackToListViewDropdown = self.view
+        collection_view = GachaCollectionDropdown(view.characters, view.user_id)
         embed = discord.Embed(
             title="📜 모집 현황",
             description="보유한 캐릭터를 선택하면 이미지를 볼 수 있습니다.",
@@ -231,7 +235,7 @@ class Gacha(commands.Cog):
                 value=f"수량: {char['quantity']}",
                 inline=False
             )
-        view = GachaCollectionView(result, user_id)
+        view = GachaCollectionDropdown(result, user_id)
         if isinstance(ctx, discord.Interaction):
             await ctx.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
