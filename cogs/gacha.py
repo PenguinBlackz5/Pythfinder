@@ -48,6 +48,60 @@ GACHA_EFFECTS = {
     1: ("조용한 바람이 분다...", 1),
 }
 
+class GachaCollectionView(discord.ui.View):
+    def __init__(self, characters, user_id):
+        super().__init__(timeout=120)
+        self.characters = characters
+        self.user_id = user_id
+        for idx, char in enumerate(characters):
+            label = f"{char['character_name']} ({'★'*char['star']}) x{char['quantity']}"
+            self.add_item(GachaCharacterButton(label, idx))
+
+class GachaCharacterButton(discord.ui.Button):
+    def __init__(self, label, idx):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.idx = idx
+
+    async def callback(self, interaction: discord.Interaction):
+        view: GachaCollectionView = self.view
+        char = view.characters[self.idx]
+        embed = discord.Embed(
+            title=f"{'★'*char['star']} {char['character_name']}",
+            description=f"보유 수량: {char['quantity']}",
+            color=0xFFD700 if char['star'] == 3 else (0x7FDBFF if char['star'] == 2 else 0xAAAAAA)
+        )
+        embed.set_image(url=char['image_url'])
+        embed.set_footer(text="아래 버튼으로 목록으로 돌아갈 수 있습니다.")
+        back_view = GachaBackToListView(view.characters, view.user_id)
+        await interaction.response.edit_message(embed=embed, view=back_view)
+
+class GachaBackToListView(discord.ui.View):
+    def __init__(self, characters, user_id):
+        super().__init__(timeout=120)
+        self.characters = characters
+        self.user_id = user_id
+        self.add_item(GachaBackButton())
+
+class GachaBackButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="목록으로", style=discord.ButtonStyle.secondary)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: GachaBackToListView = self.view
+        collection_view = GachaCollectionView(view.characters, view.user_id)
+        embed = discord.Embed(
+            title="📜 모집 현황",
+            description="보유한 캐릭터를 선택하면 이미지를 볼 수 있습니다.",
+            color=0x00ffcc
+        )
+        for char in view.characters:
+            embed.add_field(
+                name=f"{'★'*char['star']} {char['character_name']}",
+                value=f"수량: {char['quantity']}",
+                inline=False
+            )
+        await interaction.response.edit_message(embed=embed, view=collection_view)
+
 class Gacha(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -92,6 +146,18 @@ class Gacha(commands.Cog):
         # 캐릭터 랜덤 선택
         char = random.choice(GACHA_CHARACTERS[star])
 
+        # DB에 캐릭터 보유 정보 upsert
+        upsert_query = """
+            INSERT INTO user_gacha_characters (user_id, character_name, star, image_url, quantity)
+            VALUES ($1, $2, $3, $4, 1)
+            ON CONFLICT (user_id, character_name, star, image_url)
+            DO UPDATE SET quantity = user_gacha_characters.quantity + 1;
+        """
+        try:
+            await execute_query(upsert_query, (user_id, char['name'], star, char['image_url']))
+        except Exception as e:
+            print(f"가챠 캐릭터 DB 저장 오류: {e}")
+
         # 연출
         effect_text, effect_sec = GACHA_EFFECTS[star]
         effect_embed = discord.Embed(
@@ -128,6 +194,48 @@ class Gacha(commands.Cog):
             await ctx.followup.send(embed=result_embed, ephemeral=True)
         else:
             await ctx.send(embed=result_embed)
+
+    @commands.hybrid_command(name="모집현황", description="내가 보유한 가챠 캐릭터 목록을 확인합니다.")
+    async def gacha_collection(self, ctx: commands.Context):
+        user_id = ctx.author.id
+        query = """
+            SELECT character_name, star, image_url, quantity
+            FROM user_gacha_characters
+            WHERE user_id = $1
+            ORDER BY star DESC, character_name
+        """
+        try:
+            result = await execute_query(query, (user_id,))
+        except Exception as e:
+            print(f"모집현황 조회 오류: {e}")
+            result = []
+        if not result:
+            embed = discord.Embed(
+                title="📜 모집 현황",
+                description="아직 보유한 캐릭터가 없습니다. 가챠를 돌려보세요!",
+                color=0x00ffcc
+            )
+            if isinstance(ctx, discord.Interaction):
+                await ctx.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        embed = discord.Embed(
+            title="📜 모집 현황",
+            description="보유한 캐릭터를 선택하면 이미지를 볼 수 있습니다.",
+            color=0x00ffcc
+        )
+        for char in result:
+            embed.add_field(
+                name=f"{'★'*char['star']} {char['character_name']}",
+                value=f"수량: {char['quantity']}",
+                inline=False
+            )
+        view = GachaCollectionView(result, user_id)
+        if isinstance(ctx, discord.Interaction):
+            await ctx.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            await ctx.send(embed=embed, view=view)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Gacha(bot))
