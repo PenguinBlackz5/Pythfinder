@@ -140,6 +140,12 @@ class GachaCollectionDropdown(discord.ui.View):
         self.user_id = user_id
         self.add_item(GachaCharacterSelect(characters))
 
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        # 메시지 비활성화: 메시지 객체가 있으면 수정 가능, 없으면 무시
+        # (실제 메시지 객체를 저장하려면 View에 message 속성 추가 필요)
+
 class GachaCharacterSelect(discord.ui.Select):
     def __init__(self, characters):
         options = [
@@ -162,7 +168,10 @@ class GachaCharacterSelect(discord.ui.Select):
         embed.set_image(url=char['image_url'])
         embed.set_footer(text="아래 버튼으로 목록으로 돌아갈 수 있습니다.")
         back_view = GachaBackToListViewDropdown(self.characters, interaction.user.id)
-        await interaction.response.edit_message(embed=embed, view=back_view)
+        try:
+            await interaction.response.edit_message(embed=embed, view=back_view)
+        except Exception:
+            await interaction.followup.send(embed=embed, view=back_view, ephemeral=True)
 
 class GachaBackToListViewDropdown(discord.ui.View):
     def __init__(self, characters, user_id):
@@ -170,6 +179,10 @@ class GachaBackToListViewDropdown(discord.ui.View):
         self.characters = characters
         self.user_id = user_id
         self.add_item(GachaBackButtonDropdown())
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
 
 class GachaBackButtonDropdown(discord.ui.Button):
     def __init__(self):
@@ -189,7 +202,10 @@ class GachaBackButtonDropdown(discord.ui.Button):
                 value=f"수량: {char['quantity']}",
                 inline=False
             )
-        await interaction.response.edit_message(embed=embed, view=collection_view)
+        try:
+            await interaction.response.edit_message(embed=embed, view=collection_view)
+        except Exception:
+            await interaction.followup.send(embed=embed, view=collection_view, ephemeral=True)
 
 class Gacha(commands.Cog):
     def __init__(self, bot: commands.Bot):
