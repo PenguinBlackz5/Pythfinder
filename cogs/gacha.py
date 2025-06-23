@@ -13,6 +13,16 @@ GACHA_CHARACTERS = {
             "image_url": "https://pbs.twimg.com/media/Gt5RxoGbwAMDCCA?format=png",
             "description": "봐주지 않는다"
         },
+        {
+            "name": "개씹상남자 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5SlLlbIAAMhLv?format=png",
+            "description": "도망쳐서 도착한 곳에, 낙원이란 있을 수 없는 거야"
+        },
+        {
+            "name": "메랑 뉴타입각성 최종형",
+            "image_url": "https://pbs.twimg.com/media/Gt5UDsQbMAAwyhY?format=png",
+            "description": "뉴 건담은 겉치레가 아니야!"
+        },
         # 3성 캐릭터를 여기에 추가하세요.
     ],
     2: [  # 2성
@@ -21,6 +31,51 @@ GACHA_CHARACTERS = {
             "image_url": "https://pbs.twimg.com/media/Gt5TPoFWEAA1PPE?format=png",
             "description": "철 괴"
         },
+        {
+            "name": "유통이 형 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5GJIZX0AAhIia?format=png",
+            "description": "유통아~ 앞으로도 건강하고 씩씩하게 자라야 한다~"
+        },
+        {
+            "name": "유잼 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5RAbibwAQ1ZCI?format=png",
+            "description": "네가 유잼이라면 난 노잼이란 말인가?"
+        },
+        {
+            "name": "산데비스탄 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5RjkyXEAArd6E?format=png",
+            "description": "기초적인 임플란트다"
+        },
+        {
+            "name": "마크 메랑 인간형",
+            "image_url": "https://pbs.twimg.com/media/Gt5Rs4cXAAAoARF?format=png",
+            "description": "T"
+        },
+        {
+            "name": "뉴타입 각성 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5SUW3XYAAgaL2?format=png",
+            "description": "너는 뉴타입인거냐?!!"
+        },
+        {
+            "name": "드리프트 선수 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5SyqvWIAAscck?format=png",
+            "description": "간다~~~~드래프트!!!!!!!!!!!"
+        },
+        {
+            "name": "등교 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5S73zWUAEgIfr?format=png",
+            "description": "가지 않으면… 지각하게되거든……"
+        },
+        {
+            "name": "쫄쫄 굶은 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5T-CObwAEOFCI?format=png",
+            "description": "토스뱅크 1001-3805-6912"
+        },
+        {
+            "name": "한껏 진지해진 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5UpeHXcAAwOY0?format=png",
+            "description": "(엄격) (근엄) (진지)"
+        },
         # 2성 캐릭터를 여기에 추가하세요.
     ],
     1: [  # 1성
@@ -28,6 +83,36 @@ GACHA_CHARACTERS = {
             "name": "메랑",
             "image_url": "https://pbs.twimg.com/media/Gt5Tz5tXMAAxmft?format=png",
             "description": "그냥 메랑"
+        },
+        {
+            "name": "메랑 '대의를 위한 희생'",
+            "image_url": "https://pbs.twimg.com/media/Gt5QxzcWgAADBLG?format=png",
+            "description": "기억할게!"
+        },
+        {
+            "name": "공고생 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5RSlqWwAAV9kA?format=png",
+            "description": "담양공고의 자랑"
+        },
+        {
+            "name": "폐급 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5RbjXXEAABV37?format=png",
+            "description": "말년 이등병"
+        },
+        {
+            "name": "미니카 덕후 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5R9t1XYAAyLxx?format=png",
+            "description": "이게 야스지"
+        },
+        {
+            "name": "가면라이더 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5TULhbwAAXL5z?format=png",
+            "description": "메랑 이대로 가면..."
+        },
+        {
+            "name": "베이시스트 메랑",
+            "image_url": "https://pbs.twimg.com/media/Gt5Tgc8XsAASaRk?format=png",
+            "description": "왜 연주를 해도 아무 소리도 안나죠?"
         },
         # 1성 캐릭터를 여기에 추가하세요.
     ]
