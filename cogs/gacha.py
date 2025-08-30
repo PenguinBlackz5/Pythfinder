@@ -23,6 +23,21 @@ GACHA_CHARACTERS = {
             "image_url": "https://pbs.twimg.com/media/Gt5UDsQbMAAwyhY?format=png",
             "description": "뉴 건담은 겉치레가 아니야!"
         },
+        {
+            "name": "메랑 아뢰야식 리미터 해제",
+            "image_url": "https://pbs.twimg.com/media/GuHSG_KWQAA96AL?format=png",
+            "description": "쓸데없는 사슬은 모두 풀어줄테니까, 보여줘봐. 너의 힘을..."
+        },
+        {
+            "name": "메순이",
+            "image_url": "https://pbs.twimg.com/media/GuHYLpcXwAAXwUX?format=png",
+            "description": "마침내."
+        },
+        {
+            "name": "메스가키 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHaZ7mXkAAKJUA?format=png",
+            "description": "(자료 없음)"
+        },
         # 3성 캐릭터를 여기에 추가하세요.
     ],
     2: [  # 2성
@@ -76,6 +91,16 @@ GACHA_CHARACTERS = {
             "image_url": "https://pbs.twimg.com/media/Gt5UpeHXcAAwOY0?format=png",
             "description": "(엄격) (근엄) (진지)"
         },
+        {
+            "name": "안순진한메랑님",
+            "image_url": "https://pbs.twimg.com/media/GuHYZ4pXsAA2e__?format=png",
+            "description": "아 너무 무섭다;;"
+        },
+        {
+            "name": "운전병 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHZfGcWYAApJyO?format=png",
+            "description": "부릉부릉~~"
+        },
         # 2성 캐릭터를 여기에 추가하세요.
     ],
     1: [  # 1성
@@ -102,7 +127,7 @@ GACHA_CHARACTERS = {
         {
             "name": "미니카 덕후 메랑",
             "image_url": "https://pbs.twimg.com/media/Gt5R9t1XYAAyLxx?format=png",
-            "description": "이게 야스지"
+            "description": "이게 야스지 ㅋㅋ"
         },
         {
             "name": "가면라이더 메랑",
@@ -113,6 +138,16 @@ GACHA_CHARACTERS = {
             "name": "베이시스트 메랑",
             "image_url": "https://pbs.twimg.com/media/Gt5Tgc8XsAASaRk?format=png",
             "description": "왜 연주를 해도 아무 소리도 안나죠?"
+        },
+        {
+            "name": "밥먹는 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHYsKiW8AAcRCP?format=png",
+            "description": "음... 우마이..."
+        },
+        {
+            "name": "울보 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHaAABX0AASvVE?format=png",
+            "description": "ㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠ"
         },
         # 1성 캐릭터를 여기에 추가하세요.
     ]
