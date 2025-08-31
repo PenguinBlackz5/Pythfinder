@@ -198,9 +198,16 @@ GACHA_RATES = [
 
 # 연출 텍스트 및 대기 시간
 GACHA_EFFECTS = {
-    3: ("✨✨✨ 전설의 기운이 느껴진다...! ✨✨✨", 3),
-    2: ("반짝이는 빛이 감돈다...", 2),
-    1: ("조용한 바람이 분다...", 1),
+    3: ([
+        "✨    📘    ✨\n조용한 바람이 분다...",
+        "✨✨  📒  ✨✨\n반짝이는 빛이 감긴다...?",
+        "✨✨✨ 📓 ✨✨✨\n일렁이는 색채가 펼쳐진다...!"
+    ], 1),
+    2: ([
+        "✨    📘    ✨\n조용한 바람이 분다...",
+        "✨✨  📒  ✨✨\n반짝이는 빛이 감긴다...?",
+    ], 1),
+    1: ("✨    📘    ✨\n조용한 바람이 분다...", 1),
 }
 
 class GachaCollectionDropdown(discord.ui.View):
@@ -335,16 +342,29 @@ class Gacha(commands.Cog):
 
         # 연출
         effect_text, effect_sec = GACHA_EFFECTS[star]
-        effect_embed = discord.Embed(
-            title="가챠 결과...",
-            description=effect_text,
-            color=0xFFD700 if star == 3 else (0x7FDBFF if star == 2 else 0xAAAAAA)
-        )
-        if isinstance(ctx, discord.Interaction):
-            await ctx.response.send_message(embed=effect_embed, ephemeral=True)
+        if isinstance(effect_text, list):
+            for text in effect_text:
+                embed = discord.Embed(
+                    title="가챠 결과...",
+                    description=text,
+                    color=0xFFD700 if star == 3 else (0x7FDBFF if star == 2 else 0xAAAAAA)
+                )
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.response.send_message(embed=embed, ephemeral=True)
+                else:
+                    await ctx.send(embed=embed)
+                await asyncio.sleep(effect_sec)
         else:
-            await ctx.send(embed=effect_embed)
-        await asyncio.sleep(effect_sec)
+            embed = discord.Embed(
+                title="가챠 결과...",
+                description=effect_text,
+                color=0xFFD700 if star == 3 else (0x7FDBFF if star == 2 else 0xAAAAAA)
+            )
+            if isinstance(ctx, discord.Interaction):
+                await ctx.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            await asyncio.sleep(effect_sec)
 
         # 남은 돈 조회
         try:
