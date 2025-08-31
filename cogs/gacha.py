@@ -207,7 +207,9 @@ GACHA_EFFECTS = {
         "✨    📘    ✨\n조용한 바람이 분다...",
         "✨✨  📒  ✨✨\n반짝이는 빛이 감긴다...?",
     ], 1),
-    1: ("✨    📘    ✨\n조용한 바람이 분다...", 1),
+    1: ([
+        "✨    📘    ✨\n조용한 바람이 분다...",
+    ], 1),
 }
 
 class GachaCollectionDropdown(discord.ui.View):
