@@ -38,6 +38,11 @@ GACHA_CHARACTERS = {
             "image_url": "https://pbs.twimg.com/media/GuHaZ7mXkAAKJUA?format=png",
             "description": "(자료 없음)"
         },
+        {
+            "name": "순진한메랑님",
+            "image_url": "https://pbs.twimg.com/media/GuHbsYyWAAADEv3?format=png",
+            "description": "근-본"
+        },
         # 3성 캐릭터를 여기에 추가하세요.
     ],
     2: [  # 2성
@@ -101,6 +106,21 @@ GACHA_CHARACTERS = {
             "image_url": "https://pbs.twimg.com/media/GuHZfGcWYAApJyO?format=png",
             "description": "부릉부릉~~"
         },
+        {
+            "name": "머리 개망한 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHb3wTXYAAg-VF?format=png",
+            "description": "어~ 그래 (사실 안 그럼)"
+        },
+        {
+            "name": "포유나 중독 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHcRtVXYAE6NHA?format=png",
+            "description": "@포유나\n해보자 해보자 해보자\n후회하지 말고오"
+        },
+        {
+            "name": "스탠드 술사 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHcfvOWMAAx2aj?format=png",
+            "description": "히야~ 내가 9초나 멈출 수 있다"
+        },
         # 2성 캐릭터를 여기에 추가하세요.
     ],
     1: [  # 1성
@@ -148,6 +168,21 @@ GACHA_CHARACTERS = {
             "name": "울보 메랑",
             "image_url": "https://pbs.twimg.com/media/GuHaAABX0AASvVE?format=png",
             "description": "ㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠ"
+        },
+        {
+            "name": "감자튀김 과다복용 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHaslKXgAAgIDc?format=png",
+            "description": "실례가 안된다면 감튀 하나면 사주십쇼"
+        },
+        {
+            "name": "어쩔티비 시전한 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHbA5qXUAAyyJS?format=png",
+            "description": "어쩔티비"
+        },
+        {
+            "name": "앗가이 메랑",
+            "image_url": "https://pbs.twimg.com/media/GuHcFp8WoAAOshb?format=png",
+            "description": "무슨 설명을 써야 할지 모르겠는데 아무튼 양산형이라 함 ㅇㅇ"
         },
         # 1성 캐릭터를 여기에 추가하세요.
     ]
